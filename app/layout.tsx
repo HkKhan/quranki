@@ -4,10 +4,40 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
+// Get the base URL for the application
+const baseUrl = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : "https://quranki.vercel.app";
+
 export const metadata = {
   title: "QuranKi - Spaced Repetition for Quran Memorization",
   description:
     "A spaced repetition system designed for Quran memorization and review",
+  metadataBase: new URL(baseUrl),
+  openGraph: {
+    title: "QuranKi - Spaced Repetition for Quran Memorization",
+    description:
+      "Strengthen your Quran memorization with spaced repetition techniques",
+    url: baseUrl,
+    siteName: "QuranKi",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "QuranKi - Spaced Repetition for Quran Memorization",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "QuranKi - Spaced Repetition for Quran Memorization",
+    description:
+      "Strengthen your Quran memorization with spaced repetition techniques",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({
