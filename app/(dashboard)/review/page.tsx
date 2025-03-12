@@ -59,6 +59,13 @@ export default function ReviewPage() {
   const [nextAyahs, setNextAyahs] = useState<QuranAyah[]>([]);
   const [settings, setSettings] = useState(() => {
     // Initialize settings from localStorage or use defaults
+    if (typeof window === "undefined") {
+      return {
+        selectedJuzaa: [30],
+        ayahsAfter: 2,
+      };
+    }
+
     const savedSettings = localStorage.getItem("quranReviewSettings");
     if (savedSettings) {
       return JSON.parse(savedSettings);
@@ -93,6 +100,11 @@ export default function ReviewPage() {
 
       // Load spaced repetition data for each ayah
       const ayahsWithSR = data.ayahs.map((ayah: QuranAyah) => {
+        // Skip localStorage access during server-side rendering
+        if (typeof window === "undefined") {
+          return ayah;
+        }
+
         const storageKey = `quranki_sr_${ayah.surah_no}_${ayah.ayah_no_surah}`;
         const srData = localStorage.getItem(storageKey);
         if (srData) {
@@ -206,17 +218,20 @@ export default function ReviewPage() {
     setReviewAyahs(updatedReviewAyahs);
 
     // Store the updated spaced repetition data in localStorage
-    const storageKey = `quranki_sr_${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        interval: updatedAyah.interval,
-        repetitions: updatedAyah.repetitions,
-        easeFactor: updatedAyah.easeFactor,
-        lastReviewed: updatedAyah.lastReviewed,
-        dueDate: updatedAyah.dueDate,
-      })
-    );
+    // Skip localStorage access during server-side rendering
+    if (typeof window !== "undefined") {
+      const storageKey = `quranki_sr_${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          interval: updatedAyah.interval,
+          repetitions: updatedAyah.repetitions,
+          easeFactor: updatedAyah.easeFactor,
+          lastReviewed: updatedAyah.lastReviewed,
+          dueDate: updatedAyah.dueDate,
+        })
+      );
+    }
 
     setReviewedCount((prev) => prev + 1);
 
@@ -356,6 +371,21 @@ export default function ReviewPage() {
                 </p>
                 {nextAyahs.length > 0 ? (
                   <div className="space-y-4">
+                    <div className="bg-background p-4 rounded-md border-l-4 border-primary">
+                      <p className="text-center text-xs text-primary font-medium mb-2">
+                        Initial Ayah
+                      </p>
+                      <p className="font-arabic text-center mb-2">
+                        {currentAyah.ayah_ar}
+                      </p>
+                      <p className="text-center text-sm text-muted-foreground">
+                        {currentAyah.ayah_en}
+                      </p>
+                      <p className="text-center text-xs text-muted-foreground mt-2">
+                        {currentAyah.surah_name_en} {currentAyah.ayah_no_surah}
+                      </p>
+                    </div>
+
                     {nextAyahs.map((ayah, index) => (
                       <div key={index} className="bg-background p-4 rounded-md">
                         <p className="font-arabic text-center mb-2">

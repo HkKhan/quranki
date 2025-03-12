@@ -41,6 +41,9 @@ export function ReviewHeatmap() {
   useEffect(() => {
     if (!canvasRef.current) return;
 
+    // Skip localStorage access during server-side rendering
+    if (typeof window === "undefined") return;
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -238,8 +241,12 @@ export function ReviewHeatmap() {
 
     // Draw legend at the bottom with proper spacing
     const legendY = startY + gridHeight + 24;
-    ctx.fillStyle = "#6b7280";
     ctx.font = "12px system-ui";
+
+    // Use class-based colors that respect dark mode
+    // We'll need to detect the current theme by checking a data attribute
+    const isDarkMode = document.documentElement.classList.contains("dark");
+    ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280"; // Light gray in dark mode, darker gray in light mode
 
     // Past reviews legend
     ctx.fillText("Past Reviews:", startX, legendY);
@@ -249,7 +256,7 @@ export function ReviewHeatmap() {
     });
 
     // Future due legend
-    ctx.fillStyle = "#6b7280";
+    ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
     ctx.fillText("Due:", startX + canvasWidth / 2 - CANVAS_PADDING, legendY);
     dueColors.slice(1).forEach((color, i) => {
       ctx.fillStyle = color;

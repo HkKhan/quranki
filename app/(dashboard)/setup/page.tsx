@@ -175,67 +175,39 @@ export default function SetupPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <Tabs defaultValue="group1" className="w-full">
-              <TabsList className="grid grid-cols-3 mb-4">
-                <TabsTrigger value="group1">Juz 1-10</TabsTrigger>
-                <TabsTrigger value="group2">Juz 11-20</TabsTrigger>
-                <TabsTrigger value="group3">Juz 21-30</TabsTrigger>
-              </TabsList>
-
-              {juzGroups.map((group, groupIndex) => (
-                <TabsContent
-                  key={groupIndex}
-                  value={`group${groupIndex + 1}`}
-                  className="space-y-4"
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">
+                  {selectedJuzaa.length} of 30 selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSelectAll(1, 30)}
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">
-                      {
-                        selectedJuzaa.filter((juz) =>
-                          group.juzaaList.includes(juz)
-                        ).length
-                      }{" "}
-                      of {group.juzaaList.length} selected
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        handleSelectAll(
-                          group.juzaaList[0],
-                          group.juzaaList[group.juzaaList.length - 1]
-                        )
-                      }
-                    >
-                      {group.juzaaList.every((juz) =>
-                        selectedJuzaa.includes(juz)
-                      )
-                        ? "Deselect All"
-                        : "Select All"}
-                    </Button>
-                  </div>
+                  {selectedJuzaa.length === 30 ? "Deselect All" : "Select All"}
+                </Button>
+              </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                    {group.juzaaList.map((juzaa) => (
-                      <div key={juzaa} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`juzaa-${juzaa}`}
-                          checked={selectedJuzaa.includes(juzaa)}
-                          onCheckedChange={() => toggleJuzaa(juzaa)}
-                          className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                        />
-                        <Label
-                          htmlFor={`juzaa-${juzaa}`}
-                          className="text-sm cursor-pointer"
-                        >
-                          Juz {juzaa}
-                        </Label>
-                      </div>
-                    ))}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                {Array.from({ length: 30 }, (_, i) => i + 1).map((juzaa) => (
+                  <div key={juzaa} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`juzaa-${juzaa}`}
+                      checked={selectedJuzaa.includes(juzaa)}
+                      onCheckedChange={() => toggleJuzaa(juzaa)}
+                      className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                    />
+                    <Label
+                      htmlFor={`juzaa-${juzaa}`}
+                      className="text-sm cursor-pointer"
+                    >
+                      Juz {juzaa}
+                    </Label>
                   </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+                ))}
+              </div>
+            </div>
 
             {selectedJuzaa.length === 0 && (
               <div className="flex items-center p-4 border border-yellow-200 bg-yellow-50 text-yellow-800 rounded-md dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">

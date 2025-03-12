@@ -24,13 +24,6 @@ export function StatsCards({
   const progressPercent =
     dueToday > 0 ? Math.min(100, (reviewedToday / dueToday) * 100) : 0;
 
-  // Define color for streak based on value
-  const getStreakColor = () => {
-    if (streak >= 30) return "text-orange-500";
-    if (streak >= 7) return "text-amber-500";
-    return "text-primary";
-  };
-
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
@@ -60,15 +53,10 @@ export function StatsCards({
       <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Current Streak</CardTitle>
-          <Flame className={cn("h-4 w-4", getStreakColor())} />
+          <Flame className="h-4 w-4 text-primary" />
         </CardHeader>
         <CardContent>
-          <div
-            className={cn(
-              "text-2xl font-bold flex items-center",
-              getStreakColor()
-            )}
-          >
+          <div className="text-2xl font-bold">
             {streak} <span className="text-base ml-1">days</span>
             {streak >= 7 && <span className="ml-2">🔥</span>}
           </div>

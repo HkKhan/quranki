@@ -60,6 +60,12 @@ export default function DashboardPage() {
   }, []);
 
   const loadDashboardData = async () => {
+    // Skip localStorage access during server-side rendering
+    if (typeof window === "undefined") {
+      setIsLoading(false);
+      return;
+    }
+
     // Load settings from localStorage
     const savedSettings = localStorage.getItem("quranReviewSettings");
     if (savedSettings) {
@@ -78,6 +84,11 @@ export default function DashboardPage() {
 
   const calculateReviewStats = async (selectedJuzaa: number[]) => {
     try {
+      // Skip localStorage access during server-side rendering
+      if (typeof window === "undefined") {
+        return;
+      }
+
       // Get all ayahs for the selected juzaa
       const response = await fetch(
         `/api/quran?action=juz&juz=${selectedJuzaa.join(",")}`
