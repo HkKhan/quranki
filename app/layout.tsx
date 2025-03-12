@@ -22,10 +22,10 @@ export const metadata = {
     siteName: "QuranKi",
     images: [
       {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "QuranKi - Spaced Repetition for Quran Memorization",
+        url: "/quranki_logo.png",
+        width: 1024,
+        height: 1024,
+        alt: "QuranKi Logo - Spaced Repetition for Quran Memorization",
       },
     ],
     locale: "en_US",
@@ -36,7 +36,7 @@ export const metadata = {
     title: "QuranKi - Spaced Repetition for Quran Memorization",
     description:
       "Strengthen your Quran memorization with spaced repetition techniques",
-    images: ["/og-image.png"],
+    images: ["/quranki_logo.png"],
   },
 };
 

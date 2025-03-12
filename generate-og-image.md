@@ -1,40 +1,52 @@
-# Generating the OG Image for QuranKi
+# Creating an OpenGraph Image for QuranKi using your Logo
 
-To generate the OG image for better preview links in iMessage and social media, follow these steps:
+I've updated the layout to use your existing QuranKi logo in link previews. Here are two options for creating the best appearance in iMessage and social media:
 
-## Option 1: Using a Browser (Recommended)
+## Option 1: Use Your Logo Directly (Current Setup)
 
-1. Open the `public/og-image-html.html` file in a web browser
-2. Take a screenshot of the entire page (make sure it captures the full 1200x630 dimensions)
-3. Save the screenshot as `public/og-image.png`
+Your existing logo is now configured for social media previews:
 
-## Option 2: Using Chrome Headless (For Developers)
+- We're using your `quranki_logo.png` (1024x1024) directly
+- This works well for platforms that support square images (like Twitter's summary card)
+- For this approach, no further action is needed
 
-If you have Chrome installed, you can use this command:
+## Option 2: Create a Branded Social Image (Recommended)
 
-```bash
-# Make sure you're in the project root directory
-cd /Users/haneefkhan/Desktop/dev/v0_quranki/quranki
+For the best appearance across all platforms (including iMessage), create a proper 1200×630 image:
 
-# Install Chrome headless screenshot tool (one-time)
-npm install -g capture-website-cli
+1. Open the `public/og-image-template.html` file in a web browser
+2. This template includes your logo along with text in the optimal 1200×630 dimensions
+3. Take a screenshot of the entire browser window
+4. Save the screenshot as `public/og-image.png`
+5. Update layout.tsx to reference this new optimized image:
 
-# Generate the PNG image
-capture-website public/og-image-html.html --output=public/og-image.png --width=1200 --height=630 --type=png
+```typescript
+openGraph: {
+  // ...other properties...
+  images: [
+    {
+      url: "/og-image.png",
+      width: 1200,
+      height: 630,
+      alt: "QuranKi Logo - Spaced Repetition for Quran Memorization",
+    },
+  ],
+},
+twitter: {
+  // ...other properties...
+  images: ["/og-image.png"],
+},
 ```
 
-## Option 3: Using Online Services
+## Why Option 2 Is Recommended
 
-You can use online services that convert HTML to images:
+- iMessage prefers images with 1200×630 dimensions (1.91:1 aspect ratio)
+- Facebook, LinkedIn and other social platforms optimize for this size
+- Your branding will look more professional and complete with both logo and text
 
-1. Upload the `public/og-image-html.html` file to a service like [HTML/CSS to Image](https://htmlcsstoimage.com/)
-2. Set the dimensions to 1200x630
-3. Download the generated PNG and save it as `public/og-image.png`
+## Checking Your Implementation
 
-## Checking Your Image
-
-After creating the image, push your changes to GitHub and Vercel. Then you can validate the OG tags using:
+After choosing an option and deploying, validate your OpenGraph tags:
 
 - [OpenGraph.xyz](https://www.opengraph.xyz/) - Enter your website URL
-- [Twitter Card Validator](https://cards-dev.twitter.com/validator) - Enter your website URL
 - [LinkedIn Post Inspector](https://www.linkedin.com/post-inspector/) - Enter your website URL
