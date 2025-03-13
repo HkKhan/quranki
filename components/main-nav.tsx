@@ -5,13 +5,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { BookOpen, Moon, Sun } from "lucide-react";
-import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 
 export function MainNav() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  // After hydration, we can safely show the UI that depends on the theme
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -66,14 +71,20 @@ export function MainNav() {
           size="sm"
           onClick={toggleTheme}
           className="ml-auto flex items-center gap-2"
-          title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme"}
+          aria-label={mounted ? (theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme") : "Toggle Theme"}
         >
-          {theme === "dark" ? (
-            <Sun className="h-5 w-5" />
+          {mounted ? (
+            <>
+              {theme === "dark" ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+              <span>{theme === "dark" ? "Light" : "Dark"}</span>
+            </>
           ) : (
-            <Moon className="h-5 w-5" />
+            <span className="h-5 w-5" />
           )}
-          <span>{theme === "dark" ? "Light" : "Dark"}</span>
         </Button>
       </div>
     </header>

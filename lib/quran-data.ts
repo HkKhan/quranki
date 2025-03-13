@@ -80,6 +80,32 @@ export async function getNextAyahs(
   return nextAyahs;
 }
 
+export async function getPrevAyahs(
+  surahNo: number,
+  ayahNoSurah: number,
+  count: number
+): Promise<QuranAyah[]> {
+  const data = await loadQuranData();
+
+  // Find the current ayah index
+  const currentIndex = data.findIndex(
+    (ayah) => ayah.surah_no === surahNo && ayah.ayah_no_surah === ayahNoSurah
+  );
+
+  if (currentIndex === -1) return [];
+
+  // Get the previous 'count' ayahs
+  const prevAyahs: QuranAyah[] = [];
+  for (let i = 1; i <= count; i++) {
+    if (currentIndex - i >= 0) {
+      // Insert at the beginning to maintain correct order (oldest first)
+      prevAyahs.unshift(data[currentIndex - i]);
+    }
+  }
+
+  return prevAyahs;
+}
+
 export async function getReviewAyahs(
   juzNumbers: number[],
   count = 20
