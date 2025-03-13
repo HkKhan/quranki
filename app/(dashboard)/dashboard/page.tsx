@@ -27,6 +27,14 @@ import { StatsCards } from "@/components/stats-cards";
 interface QuranStats {
   totalAyahs: number;
   selectedJuzAyahs: number;
+  selectedSurahAyahs?: number;
+}
+
+interface SurahInfo {
+  surah_no: number;
+  surah_name_en: string;
+  surah_name_ar: string;
+  surah_name_roman: string;
 }
 
 interface ReviewData {
@@ -40,12 +48,15 @@ interface ReviewData {
 export default function DashboardPage() {
   const [settings, setSettings] = useState<{
     selectedJuzaa: number[];
+    selectedSurahs: number[];
+    selectionType: "juzaa" | "surah";
     ayahsAfter: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [quranStats, setQuranStats] = useState<QuranStats>({
     totalAyahs: 0,
     selectedJuzAyahs: 0,
+    selectedSurahAyahs: 0,
   });
   const [reviewStats, setReviewStats] = useState({
     dueToday: 0,
@@ -54,6 +65,7 @@ export default function DashboardPage() {
     totalReviewed: 0,
     dailyAverage: 0,
   });
+  const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -72,121 +84,181 @@ export default function DashboardPage() {
       const parsedSettings = JSON.parse(savedSettings);
       setSettings(parsedSettings);
 
-      // Fetch stats for the selected juzaa
-      await fetchQuranStats(parsedSettings.selectedJuzaa);
+      // Fetch stats for the selected juzaa or surahs
+      if (parsedSettings.selectionType === "juzaa") {
+        await fetchQuranStats(parsedSettings.selectedJuzaa);
+      } else {
+        await fetchQuranStatsBySurah(parsedSettings.selectedSurahs);
+      }
 
-      // Calculate review statistics
-      calculateReviewStats(parsedSettings.selectedJuzaa);
+      // Load all surahs info if selection type is "surah"
+      if (parsedSettings.selectionType === "surah") {
+        await loadAllSurahs();
+      }
+
+      // Calculate combined review statistics from all ayahs (both juzaa and surah)
+      calculateAllReviewStats();
     }
 
     setIsLoading(false);
   };
 
-  const calculateReviewStats = async (selectedJuzaa: number[]) => {
+  const loadAllSurahs = async () => {
+    try {
+      const response = await fetch("/api/quran?action=surahs");
+      const data = await response.json();
+
+      if (data.success && data.surahs) {
+        setAllSurahs(data.surahs);
+      }
+    } catch (error) {
+      console.error("Error loading surahs:", error);
+    }
+  };
+
+  const calculateReviewStatsBySurah = async (selectedSurahs: number[]) => {
+    // Similar to calculateReviewStats but for surahs
+    // Implementation would be similar to the juzaa version
+  };
+
+  const fetchQuranStatsBySurah = async (surahNumbers: number[]) => {
+    try {
+      // Get all ayahs to calculate total count
+      const totalResponse = await fetch("/api/quran?action=load");
+      const totalData = await totalResponse.json();
+
+      // Get ayahs for selected surahs
+      const surahResponse = await fetch(
+        `/api/quran?action=surah&surah=${surahNumbers.join(",")}`
+      );
+      const surahData = await surahResponse.json();
+
+      if (
+        totalData.success &&
+        surahData.success &&
+        surahData.ayahs
+      ) {
+        setQuranStats({
+          totalAyahs: totalData.count || 0,
+          selectedJuzAyahs: 0, // Not using juz count in this mode
+          selectedSurahAyahs: surahData.ayahs.length,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching Quran stats:", error);
+    }
+  };
+
+  // Calculate review stats for all ayahs reviewed regardless of selection type
+  const calculateAllReviewStats = async () => {
     try {
       // Skip localStorage access during server-side rendering
       if (typeof window === "undefined") {
         return;
       }
 
-      // Get all ayahs for the selected juzaa
-      const response = await fetch(
-        `/api/quran?action=juz&juz=${selectedJuzaa.join(",")}`
-      );
-      const data = await response.json();
-
-      if (!data.success || !data.ayahs) return;
-
+      // For tracking streaks and daily activity
+      const reviewDays = new Set<string>();
+      const dailyReviews: Record<string, number> = {};
+      let totalReviewed = 0;
+      let dueToday = 0;
+      
+      // Current date information
       const now = Date.now();
+      const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
       const startOfDay = new Date(now).setHours(0, 0, 0, 0);
       const endOfDay = new Date(now).setHours(23, 59, 59, 999);
-      const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).getTime();
-
-      let dueToday = 0;
-      let reviewedToday = 0;
-      let totalReviewed = 0;
-      let lastReviewDates: number[] = [];
-      let last30DaysReviews = 0;
-      let daysWithReviewsLast30 = 0;
-      const dailyReviewCounts = new Set<string>();
-
-      // Process each ayah
-      data.ayahs.forEach((ayah: any) => {
-        const storageKey = `quranki_sr_${ayah.surah_no}_${ayah.ayah_no_surah}`;
-        const srDataStr = localStorage.getItem(storageKey);
-
-        if (srDataStr) {
-          const srData: ReviewData = JSON.parse(srDataStr);
-
-          // Count due today
-          if (srData.dueDate >= startOfDay && srData.dueDate <= endOfDay) {
-            dueToday++;
-          }
-
-          // Count reviewed today and in last 30 days
-          if (srData.lastReviewed) {
-            if (
-              srData.lastReviewed >= startOfDay &&
-              srData.lastReviewed <= endOfDay
-            ) {
-              reviewedToday++;
-            }
-
-            // Track reviews in last 30 days
-            if (srData.lastReviewed >= thirtyDaysAgo) {
-              last30DaysReviews++;
-              const reviewDate = new Date(srData.lastReviewed).toDateString();
-              dailyReviewCounts.add(reviewDate);
-            }
-
-            // Add to total reviewed
+      
+      // Get all keys in localStorage for SR data and daily logs
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        
+        // Process SR data for individual ayahs
+        if (key.startsWith("quranki_sr_")) {
+          const srDataStr = localStorage.getItem(key);
+          if (srDataStr) {
+            const srData = JSON.parse(srDataStr);
             totalReviewed++;
-            lastReviewDates.push(srData.lastReviewed);
+            
+            // Check if due today
+            if (srData.dueDate >= startOfDay && srData.dueDate <= endOfDay) {
+              dueToday++;
+            }
+            
+            // Record the review date for streak calculation
+            if (srData.reviewDate) {
+              reviewDays.add(srData.reviewDate);
+            }
+            else if (srData.lastReviewed) {
+              // For backward compatibility with older data
+              const reviewDate = new Date(srData.lastReviewed).toISOString().split('T')[0];
+              reviewDays.add(reviewDate);
+            }
           }
         }
-      });
-
-      // Calculate daily average from last 30 days
-      daysWithReviewsLast30 = dailyReviewCounts.size;
-      const dailyAverage =
-        daysWithReviewsLast30 > 0
-          ? last30DaysReviews / daysWithReviewsLast30
-          : 0;
-
-      // Calculate streak
-      let streak = 0;
-      if (lastReviewDates.length > 0) {
-        lastReviewDates.sort((a, b) => b - a); // Sort in descending order
-        const uniqueDates = new Set(
-          lastReviewDates.map((date) => new Date(date).toDateString())
-        );
-        const dates = Array.from(uniqueDates);
-
-        // Count consecutive days
-        let currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0);
-
-        for (let i = 0; i < dates.length; i++) {
-          const reviewDate = new Date(dates[i]);
-          const dayDiff = Math.floor(
-            (currentDate.getTime() - reviewDate.getTime()) /
-              (1000 * 60 * 60 * 24)
-          );
-
-          if (dayDiff === i) {
-            streak++;
-          } else {
-            break;
+        
+        // Process daily logs for activity calculation
+        else if (key.startsWith("quranki_daily_log_")) {
+          const date = key.replace("quranki_daily_log_", "");
+          reviewDays.add(date);
+          
+          const logData = localStorage.getItem(key);
+          if (logData) {
+            const log = JSON.parse(logData);
+            const ayahsReviewedThisDay = Object.keys(log).length;
+            dailyReviews[date] = ayahsReviewedThisDay;
+            
+            // Count today's reviews
+            if (date === today) {
+              dailyReviews[today] = Object.keys(log).length;
+            }
           }
         }
       }
-
+      
+      // Calculate streak (consecutive days of review)
+      const sortedDates = Array.from(reviewDays).sort((a, b) => b.localeCompare(a)); // Sort newest to oldest
+      let streak = 0;
+      
+      if (sortedDates.length > 0) {
+        // Check if user reviewed today
+        const hasReviewedToday = sortedDates[0] === today;
+        let currentDateObj = hasReviewedToday 
+          ? new Date() 
+          : new Date(sortedDates[0] + "T00:00:00Z");
+        
+        for (const dateStr of sortedDates) {
+          const dateObj = new Date(dateStr + "T00:00:00Z");
+          const daysDiff = Math.round(
+            (currentDateObj.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          
+          if (daysDiff <= 1) {
+            streak++;
+            currentDateObj = dateObj;
+          } else {
+            break; // Streak is broken
+          }
+        }
+      }
+      
+      // Calculate daily average
+      const daysWithActivity = Object.keys(dailyReviews).length;
+      const totalDailyReviews = Object.values(dailyReviews).reduce((sum, count) => sum + count, 0);
+      const dailyAverage = daysWithActivity > 0 
+        ? totalDailyReviews / daysWithActivity 
+        : 0;
+        
+      // Calculate today's reviews
+      const reviewedToday = dailyReviews[today] || 0;
+      
       setReviewStats({
         dueToday,
         reviewedToday,
         streak,
         totalReviewed,
-        dailyAverage,
+        dailyAverage: Math.round(dailyAverage * 10) / 10, // Round to 1 decimal place
       });
     } catch (error) {
       console.error("Error calculating review stats:", error);
@@ -210,6 +282,7 @@ export default function DashboardPage() {
           setQuranStats({
             totalAyahs: basicData.count || 0,
             selectedJuzAyahs: juzData.ayahs?.length || 0,
+            selectedSurahAyahs: 0,
           });
         }
       }
@@ -281,6 +354,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="mb-2">
+        <h2 className="text-lg font-medium">Overall Review Statistics</h2>
+        <p className="text-sm text-muted-foreground">
+          Combined statistics for all your Quran review activity
+        </p>
+      </div>
+
       <StatsCards
         dueToday={reviewStats.dueToday}
         reviewedToday={reviewStats.reviewedToday}
@@ -319,7 +399,9 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium">Ayahs Memorized</span>
                   <span className="text-sm text-muted-foreground">
-                    {quranStats.selectedJuzAyahs} of {quranStats.totalAyahs}
+                    {settings.selectionType === "juzaa" 
+                      ? `${quranStats.selectedJuzAyahs} of ${quranStats.totalAyahs}`
+                      : `${quranStats.selectedSurahAyahs} of ${quranStats.totalAyahs}`}
                   </span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -327,7 +409,9 @@ export default function DashboardPage() {
                     className="h-full bg-primary rounded-full"
                     style={{
                       width: `${
-                        (quranStats.selectedJuzAyahs / quranStats.totalAyahs) *
+                        (settings.selectionType === "juzaa" 
+                          ? (quranStats.selectedJuzAyahs / quranStats.totalAyahs)
+                          : (quranStats.selectedSurahAyahs! / quranStats.totalAyahs)) *
                         100
                       }%`,
                     }}
@@ -335,27 +419,70 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">
-                    Juz ({settings.selectedJuzaa.length}/30)
-                  </span>
+              {settings.selectionType === "juzaa" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">
+                      Juz ({settings.selectedJuzaa.length}/30)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
+                      <div
+                        key={juz}
+                        className={`h-6 w-6 rounded flex items-center justify-center text-xs ${
+                          settings.selectedJuzaa.includes(juz)
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {juz}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-5 gap-1">
-                  {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
-                    <div
-                      key={juz}
-                      className={`h-6 w-6 rounded flex items-center justify-center text-xs ${
-                        settings.selectedJuzaa.includes(juz)
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {juz}
+              )}
+
+              {settings.selectionType === "surah" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">
+                      Surahs ({settings.selectedSurahs.length}/{allSurahs.length})
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 overflow-y-auto max-h-48">
+                    {allSurahs.map((surah) => (
+                      <div
+                        key={surah.surah_no}
+                        className={`h-6 w-6 rounded flex items-center justify-center text-xs ${
+                          settings.selectedSurahs.includes(surah.surah_no)
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                        title={`Surah ${surah.surah_name_roman}`}
+                      >
+                        {surah.surah_no}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <h4 className="text-sm font-medium mb-2">Selected Surahs:</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs overflow-y-auto max-h-40">
+                      {allSurahs
+                        .filter(s => settings.selectedSurahs.includes(s.surah_no))
+                        .map(surah => (
+                          <div key={surah.surah_no} className="flex items-center space-x-1">
+                            <span className="bg-primary text-primary-foreground rounded w-5 h-5 flex items-center justify-center flex-shrink-0">
+                              {surah.surah_no}
+                            </span>
+                            <span className="truncate">{surah.surah_no} - Surah {surah.surah_name_roman}</span>
+                          </div>
+                        ))
+                      }
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="border rounded-md p-3 bg-muted/40">
                 <p className="text-sm">

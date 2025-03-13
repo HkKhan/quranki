@@ -4,27 +4,8 @@ import { BookOpen, BarChart2, Calendar } from "lucide-react"
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center">
-          <Link href="/" className="flex items-center space-x-2">
-            <BookOpen className="h-6 w-6" />
-            <span className="font-bold">QuranReview</span>
-          </Link>
-          <nav className="ml-auto flex gap-4 sm:gap-6">
-            <Link href="/dashboard" className="text-sm font-medium">
-              Dashboard
-            </Link>
-            <Link href="/review" className="text-sm font-medium">
-              Review
-            </Link>
-            <Link href="/setup" className="text-sm font-medium">
-              Setup
-            </Link>
-          </nav>
-        </div>
-      </header>
-      <main className="flex-1">
+    <div>
+      <main>
         <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48">
           <div className="container px-4 md:px-6">
             <div className="flex flex-col items-center space-y-4 text-center">
@@ -40,11 +21,11 @@ export default function LandingPage() {
                 <Link href="/setup">
                   <Button size="lg">Get Started</Button>
                 </Link>
-                <Link href="/about">
+                <a href="#how-it-works">
                   <Button variant="outline" size="lg">
                     Learn More
                   </Button>
-                </Link>
+                </a>
               </div>
             </div>
           </div>
@@ -76,7 +57,7 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
-        <section className="w-full py-12 md:py-24 lg:py-32">
+        <section id="how-it-works" className="w-full py-12 md:py-24 lg:py-32 scroll-mt-20">
           <div className="container px-4 md:px-6">
             <div className="grid gap-10 lg:grid-cols-2 items-center">
               <div className="space-y-4">
@@ -119,24 +100,6 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
-      <footer className="border-t py-6 md:py-0">
-        <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
-          <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            © 2025 QuranReview. All rights reserved.
-          </p>
-          <div className="flex gap-4">
-            <Link href="/privacy" className="text-sm text-muted-foreground">
-              Privacy
-            </Link>
-            <Link href="/terms" className="text-sm text-muted-foreground">
-              Terms
-            </Link>
-            <Link href="/contact" className="text-sm text-muted-foreground">
-              Contact
-            </Link>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }

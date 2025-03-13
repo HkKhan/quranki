@@ -23,15 +23,28 @@ import {
   BadgeCheck,
   AlertTriangle,
   BookOpenCheck,
+  BookText,
 } from "lucide-react";
+
+// Interface for Surah type
+interface SurahInfo {
+  surah_no: number;
+  surah_name_en: string;
+  surah_name_ar: string;
+  surah_name_roman: string;
+}
 
 export default function SetupPage() {
   const router = useRouter();
   const [selectedJuzaa, setSelectedJuzaa] = useState<number[]>([]);
+  const [selectedSurahs, setSelectedSurahs] = useState<number[]>([]);
   const [ayahsAfter, setAyahsAfter] = useState(2);
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectionType, setSelectionType] = useState<"juzaa" | "surah">("juzaa");
+  const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
+  const [surahGroups, setSurahGroups] = useState<{ name: string; surahList: SurahInfo[] }[]>([]);
 
   const juzGroups = [
     {
@@ -54,12 +67,30 @@ export default function SetupPage() {
     if (savedSettings) {
       const settings = JSON.parse(savedSettings);
       setSelectedJuzaa(settings.selectedJuzaa || []);
+      setSelectedSurahs(settings.selectedSurahs || []);
       setAyahsAfter(settings.ayahsAfter || 2);
+      setSelectionType(settings.selectionType || "juzaa");
     }
+
+    // Load all surahs
+    loadSurahs();
 
     // Verify that the Quran data is available
     verifyQuranData();
   }, []);
+
+  const loadSurahs = async () => {
+    try {
+      const response = await fetch("/api/quran?action=surahs");
+      const data = await response.json();
+
+      if (data.success && data.surahs) {
+        setAllSurahs(data.surahs);
+      }
+    } catch (error) {
+      console.error("Error loading surahs:", error);
+    }
+  };
 
   const verifyQuranData = async () => {
     setIsVerifying(true);
@@ -86,7 +117,15 @@ export default function SetupPage() {
     }
   };
 
-  const handleSelectAll = (start: number, end: number) => {
+  const toggleSurah = (surahNo: number) => {
+    if (selectedSurahs.includes(surahNo)) {
+      setSelectedSurahs(selectedSurahs.filter((s) => s !== surahNo));
+    } else {
+      setSelectedSurahs([...selectedSurahs, surahNo]);
+    }
+  };
+
+  const handleSelectAllJuzaa = (start: number, end: number) => {
     const allInRange = Array.from(
       { length: end - start + 1 },
       (_, i) => start + i
@@ -111,8 +150,31 @@ export default function SetupPage() {
     }
   };
 
+  const handleSelectAllSurahs = (surahs: SurahInfo[]) => {
+    const surahNumbers = surahs.map(s => s.surah_no);
+    
+    // If all in range are already selected, deselect all
+    const allSelected = surahNumbers.every(no => selectedSurahs.includes(no));
+
+    if (allSelected) {
+      setSelectedSurahs(
+        selectedSurahs.filter(no => !surahNumbers.includes(no))
+      );
+    } else {
+      // Add all surahs that aren't already selected
+      const newSelected = [...selectedSurahs];
+      surahNumbers.forEach(no => {
+        if (!newSelected.includes(no)) {
+          newSelected.push(no);
+        }
+      });
+      setSelectedSurahs(newSelected);
+    }
+  };
+
   const handleSave = async () => {
-    if (selectedJuzaa.length === 0) {
+    if ((selectionType === "juzaa" && selectedJuzaa.length === 0) || 
+        (selectionType === "surah" && selectedSurahs.length === 0)) {
       console.error("Selection Required");
       return;
     }
@@ -122,15 +184,25 @@ export default function SetupPage() {
     // Save settings to localStorage
     const settings = {
       selectedJuzaa,
+      selectedSurahs,
+      selectionType,
       ayahsAfter,
     };
     localStorage.setItem("quranReviewSettings", JSON.stringify(settings));
 
-    // Verify that we can load ayahs from the selected juzaa
+    // Verify that we can load ayahs from the selected items
     try {
-      const response = await fetch(
-        `/api/quran?action=juz&juz=${selectedJuzaa.join(",")}`
-      );
+      let response;
+      if (selectionType === "juzaa") {
+        response = await fetch(
+          `/api/quran?action=juz&juz=${selectedJuzaa.join(",")}`
+        );
+      } else {
+        response = await fetch(
+          `/api/quran?action=surah&surah=${selectedSurahs.join(",")}`
+        );
+      }
+      
       const data = await response.json();
 
       if (!data.success || !data.ayahs || data.ayahs.length === 0) {
@@ -142,7 +214,7 @@ export default function SetupPage() {
       // Navigate to dashboard on success
       router.push("/dashboard");
     } catch (error) {
-      console.error("Error verifying selected juzaa:", error);
+      console.error("Error verifying selection:", error);
       setIsSaving(false);
     }
   };
@@ -168,101 +240,150 @@ export default function SetupPage() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <BookOpenCheck className="h-5 w-5 mr-2" />
-              Select Juzaa You Know
+              Select What to Review
             </CardTitle>
             <CardDescription>
-              Choose the juzaa you have memorized and want to review
+              Choose juzaa or surahs you have memorized and want to review
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">
-                  {selectedJuzaa.length} of 30 selected
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSelectAll(1, 30)}
-                >
-                  {selectedJuzaa.length === 30 ? "Deselect All" : "Select All"}
-                </Button>
-              </div>
+            <Tabs 
+              value={selectionType} 
+              onValueChange={(v) => setSelectionType(v as "juzaa" | "surah")}
+              className="w-full"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="juzaa">By Juzaa</TabsTrigger>
+                <TabsTrigger value="surah">By Surah</TabsTrigger>
+              </TabsList>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                {Array.from({ length: 30 }, (_, i) => i + 1).map((juzaa) => (
-                  <div key={juzaa} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`juzaa-${juzaa}`}
-                      checked={selectedJuzaa.includes(juzaa)}
-                      onCheckedChange={() => toggleJuzaa(juzaa)}
-                      className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                    />
-                    <Label
-                      htmlFor={`juzaa-${juzaa}`}
-                      className="text-sm cursor-pointer"
-                    >
-                      Juz {juzaa}
-                    </Label>
+              <TabsContent value="juzaa" className="space-y-4 mt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">
+                    {selectedJuzaa.length} of 30 selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSelectAllJuzaa(1, 30)}
+                  >
+                    {selectedJuzaa.length === 30 ? "Deselect All" : "Select All"}
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                  {Array.from({ length: 30 }, (_, i) => i + 1).map((juzaa) => (
+                    <div key={juzaa} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`juzaa-${juzaa}`}
+                        checked={selectedJuzaa.includes(juzaa)}
+                        onCheckedChange={() => toggleJuzaa(juzaa)}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                      />
+                      <Label
+                        htmlFor={`juzaa-${juzaa}`}
+                        className="text-sm cursor-pointer"
+                      >
+                        Juz {juzaa}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                
+                {selectedJuzaa.length === 0 && (
+                  <div className="flex items-center p-4 border border-yellow-200 bg-yellow-50 text-yellow-800 rounded-md dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
+                    <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
+                    <p className="text-sm">
+                      Please select at least one juzaa to continue.
+                    </p>
                   </div>
-                ))}
-              </div>
-            </div>
+                )}
+              </TabsContent>
 
-            {selectedJuzaa.length === 0 && (
-              <div className="flex items-center p-4 border border-yellow-200 bg-yellow-50 text-yellow-800 rounded-md dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
-                <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
-                <p className="text-sm">
-                  Please select at least one juzaa to continue.
-                </p>
-              </div>
-            )}
+              <TabsContent value="surah" className="space-y-4 mt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">
+                    {selectedSurahs.length} of {allSurahs.length} selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSelectAllSurahs(allSurahs)}
+                  >
+                    {selectedSurahs.length === allSurahs.length ? "Deselect All" : "Select All"}
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                  {allSurahs.map((surah) => (
+                    <div key={surah.surah_no} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`surah-${surah.surah_no}`}
+                        checked={selectedSurahs.includes(surah.surah_no)}
+                        onCheckedChange={() => toggleSurah(surah.surah_no)}
+                        className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                      />
+                      <Label
+                        htmlFor={`surah-${surah.surah_no}`}
+                        className="text-sm cursor-pointer"
+                      >
+                        {surah.surah_no} - Surah {surah.surah_name_roman}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                
+                {selectedSurahs.length === 0 && (
+                  <div className="flex items-center p-4 border border-yellow-200 bg-yellow-50 text-yellow-800 rounded-md dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
+                    <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
+                    <p className="text-sm">
+                      Please select at least one surah to continue.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Ayahs After</CardTitle>
+            <CardTitle className="flex items-center">
+              <BookOpen className="h-5 w-5 mr-2" />
+              Context Settings
+            </CardTitle>
             <CardDescription>
-              How many ayahs do you want to recall after seeing the prompt ayah?
+              Configure how much context is shown after each ayah
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Ayahs to recall:</span>
-                <span className="text-2xl font-bold text-primary">
-                  {ayahsAfter}
-                </span>
-              </div>
-
-              <Slider
-                value={[ayahsAfter]}
-                min={1}
-                max={5}
-                step={1}
-                onValueChange={(value) => setAyahsAfter(value[0])}
-                className="my-4"
-              />
-
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4</span>
-                <span>5</span>
-              </div>
-
-              <div className="bg-muted p-4 rounded-md mt-4">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Example:</span>
+            <div className="space-y-6">
+              <div>
+                <div className="flex justify-between mb-2">
+                  <Label htmlFor="ayahs-after" className="text-sm font-medium">
+                    Ayahs After
+                  </Label>
+                  <span>{ayahsAfter}</span>
                 </div>
-                <p className="mt-2 text-sm">
-                  If you select {ayahsAfter} ayah{ayahsAfter > 1 ? "s" : ""}{" "}
-                  after, when shown the first ayah of Surah Al-Fatiha, you'll
-                  need to recall the next {ayahsAfter} ayah
-                  {ayahsAfter > 1 ? "s" : ""} from memory.
+                <Slider
+                  id="ayahs-after"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={[ayahsAfter]}
+                  onValueChange={(value) => setAyahsAfter(value[0])}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>0</span>
+                  <span>2</span>
+                  <span>4</span>
+                  <span>6</span>
+                  <span>8</span>
+                  <span>10</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Number of ayahs to show after the current ayah during review.
                 </p>
               </div>
             </div>
@@ -272,7 +393,9 @@ export default function SetupPage() {
         <div className="flex justify-end">
           <Button
             onClick={handleSave}
-            disabled={selectedJuzaa.length === 0 || isSaving}
+            disabled={(selectionType === "juzaa" && selectedJuzaa.length === 0) || 
+                     (selectionType === "surah" && selectedSurahs.length === 0) || 
+                     isSaving}
             className="flex items-center"
           >
             {isSaving ? (
