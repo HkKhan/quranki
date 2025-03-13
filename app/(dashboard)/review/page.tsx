@@ -62,6 +62,8 @@ export default function ReviewPage() {
     if (typeof window === "undefined") {
       return {
         selectedJuzaa: [30],
+        selectedSurahs: [],
+        selectionType: "juzaa",
         ayahsAfter: 2,
       };
     }
@@ -72,6 +74,8 @@ export default function ReviewPage() {
     }
     return {
       selectedJuzaa: [30],
+      selectedSurahs: [],
+      selectionType: "juzaa",
       ayahsAfter: 2,
     };
   });
@@ -84,10 +88,20 @@ export default function ReviewPage() {
   const loadAyahs = async () => {
     setIsLoading(true);
     try {
-      const juzParam = settings.selectedJuzaa.join(",");
-      const response = await fetch(
-        `/api/quran?action=review&juz=${juzParam}&count=20`
-      );
+      let response;
+      
+      if (settings.selectionType === "juzaa") {
+        const juzParam = settings.selectedJuzaa.join(",");
+        response = await fetch(
+          `/api/quran?action=review&juz=${juzParam}&count=20`
+        );
+      } else {
+        const surahParam = settings.selectedSurahs.join(",");
+        response = await fetch(
+          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=20`
+        );
+      }
+      
       const data = await response.json();
 
       if (!data.success || !data.ayahs || data.ayahs.length === 0) {
@@ -140,15 +154,52 @@ export default function ReviewPage() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     try {
-      const response = await fetch(
-        `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${settings.ayahsAfter}`
-      );
-      const data = await response.json();
-
-      if (data.success && data.ayahs) {
-        setNextAyahs(data.ayahs);
-      } else {
+      // If ayahsAfter is 0, don't fetch any next ayahs
+      if (settings.ayahsAfter === 0) {
         setNextAyahs([]);
+        return;
+      }
+      
+      // First check if we need to respect surah boundaries
+      const surahCountResponse = await fetch(
+        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`
+      );
+      const surahCountData = await surahCountResponse.json();
+      
+      if (surahCountData.success) {
+        // Calculate how many ayahs are remaining in this surah
+        const ayahsRemainingInSurah = surahCountData.count - currentAyah.ayah_no_surah;
+        
+        // Use the minimum of ayahsAfter and ayahsRemainingInSurah
+        const adjustedCount = Math.min(settings.ayahsAfter, ayahsRemainingInSurah);
+        
+        if (adjustedCount <= 0) {
+          setNextAyahs([]);
+          return;
+        }
+        
+        const response = await fetch(
+          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`
+        );
+        const data = await response.json();
+
+        if (data.success && data.ayahs) {
+          setNextAyahs(data.ayahs);
+        } else {
+          setNextAyahs([]);
+        }
+      } else {
+        // If we couldn't get the surah count, fall back to the original behavior
+        const response = await fetch(
+          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${settings.ayahsAfter}`
+        );
+        const data = await response.json();
+
+        if (data.success && data.ayahs) {
+          setNextAyahs(data.ayahs);
+        } else {
+          setNextAyahs([]);
+        }
       }
     } catch (error) {
       console.error("Error loading next ayahs:", error);
@@ -221,6 +272,12 @@ export default function ReviewPage() {
     // Skip localStorage access during server-side rendering
     if (typeof window !== "undefined") {
       const storageKey = `quranki_sr_${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
+
+      // Also save review date to a daily log for better statistics tracking
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const dailyLogKey = `quranki_daily_log_${today}`;
+      
+      // Save SR data for this specific ayah
       localStorage.setItem(
         storageKey,
         JSON.stringify({
@@ -229,8 +286,27 @@ export default function ReviewPage() {
           easeFactor: updatedAyah.easeFactor,
           lastReviewed: updatedAyah.lastReviewed,
           dueDate: updatedAyah.dueDate,
+          selectionType: settings.selectionType, // Track which selection type was used
+          reviewDate: today,
         })
       );
+      
+      // Update daily log
+      let dailyLog: Record<string, number> = {};
+      const existingLog = localStorage.getItem(dailyLogKey);
+      if (existingLog) {
+        dailyLog = JSON.parse(existingLog);
+      }
+      
+      // Add or increment ayah count
+      const ayahKey = `${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
+      if (dailyLog[ayahKey]) {
+        dailyLog[ayahKey]++;
+      } else {
+        dailyLog[ayahKey] = 1;
+      }
+      
+      localStorage.setItem(dailyLogKey, JSON.stringify(dailyLog));
     }
 
     setReviewedCount((prev) => prev + 1);
@@ -337,7 +413,7 @@ export default function ReviewPage() {
               <div className="bg-muted/50 p-6 rounded-lg">
                 <div className="mb-4 text-center">
                   <span className="text-sm font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
-                    {currentAyah.surah_name_en} ({currentAyah.surah_name_roman})
+                    {currentAyah.surah_no} - Surah {currentAyah.surah_name_roman}
                     {" - "}
                     Ayah {currentAyah.ayah_no_surah}
                   </span>
@@ -382,7 +458,7 @@ export default function ReviewPage() {
                         {currentAyah.ayah_en}
                       </p>
                       <p className="text-center text-xs text-muted-foreground mt-2">
-                        {currentAyah.surah_name_en} {currentAyah.ayah_no_surah}
+                        {currentAyah.surah_no} - {currentAyah.surah_name_roman} {currentAyah.ayah_no_surah}
                       </p>
                     </div>
 
@@ -395,7 +471,7 @@ export default function ReviewPage() {
                           {ayah.ayah_en}
                         </p>
                         <p className="text-center text-xs text-muted-foreground mt-2">
-                          {ayah.surah_name_en} {ayah.ayah_no_surah}
+                          {ayah.surah_no} - {ayah.surah_name_roman} {ayah.ayah_no_surah}
                         </p>
                       </div>
                     ))}

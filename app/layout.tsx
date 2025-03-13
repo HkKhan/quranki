@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { MainNav } from "@/components/main-nav";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -68,7 +69,39 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
+          <div className="flex min-h-screen flex-col">
+            <MainNav />
+            <main className="flex-1">
+              {children}
+            </main>
+            <footer className="border-t py-6 md:py-0">
+              <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
+                <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
+                  © {new Date().getFullYear()} QuranKi. All rights reserved.
+                </p>
+                <div className="flex gap-4">
+                  <a
+                    href="/privacy"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Privacy
+                  </a>
+                  <a
+                    href="/terms"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Terms
+                  </a>
+                  <a
+                    href="/contact"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Contact
+                  </a>
+                </div>
+              </div>
+            </footer>
+          </div>
         </ThemeProvider>
       </body>
     </html>

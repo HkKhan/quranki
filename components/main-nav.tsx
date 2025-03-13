@@ -4,63 +4,77 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Moon, Sun } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "next-themes";
 
 export function MainNav() {
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
 
-  const navItems = [
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const routes = [
     {
-      name: "Home",
-      href: "/",
-      isActive: pathname === "/",
-    },
-    {
-      name: "Dashboard",
       href: "/dashboard",
-      isActive: pathname.includes("/dashboard"),
+      label: "Dashboard",
+      active: pathname === "/dashboard",
     },
     {
-      name: "Review",
       href: "/review",
-      isActive: pathname.includes("/review"),
+      label: "Review",
+      active: pathname === "/review",
     },
     {
-      name: "Setup",
       href: "/setup",
-      isActive: pathname.includes("/setup"),
+      label: "Setup",
+      active: pathname === "/setup",
     },
   ];
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
-        <div className="mr-4 flex">
-          <Link href="/" className="mr-2 flex items-center space-x-2">
+        <div className="flex items-center mr-4">
+          <Link href="/" className="flex items-center space-x-2">
             <BookOpen className="h-6 w-6" />
-            <span className="hidden font-bold sm:inline-block">QuranKi</span>
+            <span className="font-bold">QuranKi</span>
           </Link>
         </div>
-        <nav className="flex items-center space-x-6 text-sm font-medium">
-          {navItems.map((item) => (
+        <div className="flex-1"></div>
+        <nav className="flex items-center space-x-6 pr-6">
+          {routes.map((route) => (
             <Link
-              href={item.href}
-              key={item.href}
+              key={route.href}
+              href={route.href}
               className={cn(
-                "transition-colors hover:text-foreground/80",
-                item.isActive
-                  ? "text-foreground font-semibold"
-                  : "text-foreground/60"
+                "text-sm font-medium transition-colors hover:text-primary",
+                route.active
+                  ? "border-b-2 border-primary pb-2 text-foreground"
+                  : "text-foreground"
               )}
             >
-              {item.name}
+              {route.label}
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center space-x-4">
-          <ModeToggle />
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleTheme}
+          className="ml-auto flex items-center gap-2"
+          title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme"}
+        >
+          {theme === "dark" ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
+          <span>{theme === "dark" ? "Light" : "Dark"}</span>
+        </Button>
       </div>
     </header>
   );

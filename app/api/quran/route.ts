@@ -1,5 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getAyahsByJuz, getNextAyahs, getReviewAyahs, loadQuranData } from "@/lib/quran-data"
+import { 
+  getAyahsByJuz, 
+  getNextAyahs, 
+  getReviewAyahs, 
+  loadQuranData,
+  getAllSurahs,
+  getAyahsBySurah,
+  getReviewAyahsBySurah,
+  getSurahAyahCount
+} from "@/lib/quran-data"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -27,6 +36,49 @@ export async function GET(request: NextRequest) {
       const ayahs = await getAyahsByJuz(juzNumbers)
 
       return NextResponse.json({ success: true, ayahs })
+    }
+
+    if (action === "surahs") {
+      // Get all surahs info
+      const surahs = await getAllSurahs()
+      return NextResponse.json({ success: true, surahs })
+    }
+
+    if (action === "surah") {
+      const surahParam = searchParams.get("surah")
+      if (!surahParam) {
+        return NextResponse.json({ success: false, error: "Missing surah parameter" }, { status: 400 })
+      }
+
+      const surahNumbers = surahParam.split(",").map((s) => Number.parseInt(s, 10))
+      const ayahs = await getAyahsBySurah(surahNumbers)
+
+      return NextResponse.json({ success: true, ayahs })
+    }
+
+    if (action === "surahAyahCount") {
+      const surahNo = Number.parseInt(searchParams.get("surah") || "0", 10)
+      if (!surahNo) {
+        return NextResponse.json({ success: false, error: "Missing or invalid surah parameter" }, { status: 400 })
+      }
+
+      const count = await getSurahAyahCount(surahNo)
+      return NextResponse.json({ success: true, count })
+    }
+
+    if (action === "reviewBySurah") {
+      const surahParam = searchParams.get("surah")
+      const countParam = searchParams.get("count") || "20"
+
+      if (!surahParam) {
+        return NextResponse.json({ success: false, error: "Missing surah parameter" }, { status: 400 })
+      }
+
+      const surahNumbers = surahParam.split(",").map((s) => Number.parseInt(s, 10))
+      const count = Number.parseInt(countParam, 10)
+
+      const reviewAyahs = await getReviewAyahsBySurah(surahNumbers, count)
+      return NextResponse.json({ success: true, ayahs: reviewAyahs })
     }
 
     if (action === "next") {

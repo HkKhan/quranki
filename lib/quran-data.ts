@@ -91,3 +91,50 @@ export async function getReviewAyahs(
   const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, count);
 }
+
+// Get all unique surahs from the Quran data
+export async function getAllSurahs(): Promise<{ surah_no: number; surah_name_en: string; surah_name_ar: string; surah_name_roman: string }[]> {
+  const data = await loadQuranData();
+  
+  // Extract unique surahs using Set and map
+  const uniqueSurahs = Array.from(
+    new Set(data.map(ayah => ayah.surah_no))
+  ).map(surahNo => {
+    const ayah = data.find(a => a.surah_no === surahNo);
+    return {
+      surah_no: surahNo,
+      surah_name_en: ayah?.surah_name_en || '',
+      surah_name_ar: ayah?.surah_name_ar || '',
+      surah_name_roman: ayah?.surah_name_roman || ''
+    };
+  });
+  
+  // Sort by surah number
+  return uniqueSurahs.sort((a, b) => a.surah_no - b.surah_no);
+}
+
+// Get ayahs by surah numbers
+export async function getAyahsBySurah(
+  surahNumbers: number[]
+): Promise<QuranAyah[]> {
+  const data = await loadQuranData();
+  return data.filter((ayah) => surahNumbers.includes(ayah.surah_no));
+}
+
+// Get ayahs for review by surah numbers
+export async function getReviewAyahsBySurah(
+  surahNumbers: number[],
+  count = 20
+): Promise<QuranAyah[]> {
+  const ayahs = await getAyahsBySurah(surahNumbers);
+
+  // Similar to juz review, randomly select ayahs for review
+  const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+}
+
+// Get the total number of ayahs in a surah
+export async function getSurahAyahCount(surahNo: number): Promise<number> {
+  const data = await loadQuranData();
+  return data.filter(ayah => ayah.surah_no === surahNo).length;
+}
