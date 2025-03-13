@@ -57,6 +57,7 @@ export default function ReviewPage() {
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>("loading");
   const [reviewedCount, setReviewedCount] = useState(0);
   const [nextAyahs, setNextAyahs] = useState<QuranAyah[]>([]);
+  const [prevAyahs, setPrevAyahs] = useState<QuranAyah[]>([]);
   const [settings, setSettings] = useState(() => {
     // Initialize settings from localStorage or use defaults
     if (typeof window === "undefined") {
@@ -65,6 +66,7 @@ export default function ReviewPage() {
         selectedSurahs: [],
         selectionType: "juzaa",
         ayahsAfter: 2,
+        promptsPerSession: 20,
       };
     }
 
@@ -77,6 +79,7 @@ export default function ReviewPage() {
       selectedSurahs: [],
       selectionType: "juzaa",
       ayahsAfter: 2,
+      promptsPerSession: 20,
     };
   });
   const [error, setError] = useState<string | null>(null);
@@ -90,15 +93,18 @@ export default function ReviewPage() {
     try {
       let response;
       
+      // Use the configured promptsPerSession or default to 20 if not set
+      const count = settings.promptsPerSession || 20;
+      
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
-          `/api/quran?action=review&juz=${juzParam}&count=20`
+          `/api/quran?action=review&juz=${juzParam}&count=${count}`
         );
       } else {
         const surahParam = settings.selectedSurahs.join(",");
         response = await fetch(
-          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=20`
+          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`
         );
       }
       
@@ -154,6 +160,18 @@ export default function ReviewPage() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     try {
+      // First, load previous ayahs as context (always 2)
+      const prevResponse = await fetch(
+        `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`
+      );
+      const prevData = await prevResponse.json();
+      
+      if (prevData.success && prevData.ayahs) {
+        setPrevAyahs(prevData.ayahs);
+      } else {
+        setPrevAyahs([]);
+      }
+      
       // If ayahsAfter is 0, don't fetch any next ayahs
       if (settings.ayahsAfter === 0) {
         setNextAyahs([]);
@@ -202,7 +220,8 @@ export default function ReviewPage() {
         }
       }
     } catch (error) {
-      console.error("Error loading next ayahs:", error);
+      console.error("Error loading ayahs:", error);
+      setPrevAyahs([]);
       setNextAyahs([]);
     }
   };
@@ -411,6 +430,25 @@ export default function ReviewPage() {
           {reviewStatus === "question" ? (
             <div className="space-y-6">
               <div className="bg-muted/50 p-6 rounded-lg">
+                {prevAyahs.length > 0 && (
+                  <div className="mb-6">
+                    <p className="text-base text-muted-foreground text-center mb-3 font-bold">Context (Previous Ayahs)</p>
+                    {prevAyahs.map((ayah, index) => (
+                      <div key={index} className="mb-3 border-b pb-3 last:border-b-0 last:pb-0">
+                        <p className="font-arabic text-center text-sm mb-1">
+                          {ayah.ayah_ar}
+                        </p>
+                        <p className="text-center text-xs text-muted-foreground">
+                          {ayah.ayah_en}
+                        </p>
+                        <p className="text-center text-xs text-muted-foreground mt-1 font-bold">
+                          {ayah.surah_no} - {ayah.surah_name_roman} {ayah.ayah_no_surah}
+                        </p>
+                      </div>
+                    ))}
+                    <div className="border-t my-4"></div>
+                  </div>
+                )}
                 <div className="mb-4 text-center">
                   <span className="text-sm font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
                     {currentAyah.surah_no} - Surah {currentAyah.surah_name_roman}
@@ -490,18 +528,18 @@ export default function ReviewPage() {
               <div className="grid grid-cols-2 gap-4">
                 <Button
                   variant="outline"
-                  className="bg-red-50 hover:bg-red-100 border-red-200"
+                  className="bg-red-50 hover:bg-red-100 border-red-200 text-foreground dark:bg-red-950 dark:hover:bg-red-900 dark:border-red-800 dark:text-red-100"
                   onClick={() => handleRating(false)}
                 >
-                  <ThumbsDown className="mr-2 h-4 w-4 text-red-500" />
+                  <ThumbsDown className="mr-2 h-4 w-4 text-red-500 dark:text-red-400" />
                   Forgot
                 </Button>
                 <Button
                   variant="outline"
-                  className="bg-green-50 hover:bg-green-100 border-green-200"
+                  className="bg-green-50 hover:bg-green-100 border-green-200 text-foreground dark:bg-green-950 dark:hover:bg-green-900 dark:border-green-800 dark:text-green-100"
                   onClick={() => handleRating(true)}
                 >
-                  <ThumbsUp className="mr-2 h-4 w-4 text-green-500" />
+                  <ThumbsUp className="mr-2 h-4 w-4 text-green-500 dark:text-green-400" />
                   Remembered
                 </Button>
               </div>

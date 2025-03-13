@@ -7,7 +7,8 @@ import {
   getAllSurahs,
   getAyahsBySurah,
   getReviewAyahsBySurah,
-  getSurahAyahCount
+  getSurahAyahCount,
+  getPrevAyahs
 } from "@/lib/quran-data"
 
 export async function GET(request: NextRequest) {
@@ -92,6 +93,19 @@ export async function GET(request: NextRequest) {
 
       const nextAyahs = await getNextAyahs(surahNo, ayahNo, count)
       return NextResponse.json({ success: true, ayahs: nextAyahs })
+    }
+
+    if (action === "prev") {
+      const surahNo = Number.parseInt(searchParams.get("surah") || "0", 10)
+      const ayahNo = Number.parseInt(searchParams.get("ayah") || "0", 10)
+      const count = Number.parseInt(searchParams.get("count") || "1", 10)
+
+      if (!surahNo || !ayahNo) {
+        return NextResponse.json({ success: false, error: "Missing surah or ayah parameter" }, { status: 400 })
+      }
+
+      const prevAyahs = await getPrevAyahs(surahNo, ayahNo, count)
+      return NextResponse.json({ success: true, ayahs: prevAyahs })
     }
 
     if (action === "review") {

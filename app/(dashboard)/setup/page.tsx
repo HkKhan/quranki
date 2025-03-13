@@ -25,6 +25,7 @@ import {
   BookOpenCheck,
   BookText,
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 // Interface for Surah type
 interface SurahInfo {
@@ -39,6 +40,7 @@ export default function SetupPage() {
   const [selectedJuzaa, setSelectedJuzaa] = useState<number[]>([]);
   const [selectedSurahs, setSelectedSurahs] = useState<number[]>([]);
   const [ayahsAfter, setAyahsAfter] = useState(2);
+  const [promptsPerSession, setPromptsPerSession] = useState(20);
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,6 +71,7 @@ export default function SetupPage() {
       setSelectedJuzaa(settings.selectedJuzaa || []);
       setSelectedSurahs(settings.selectedSurahs || []);
       setAyahsAfter(settings.ayahsAfter || 2);
+      setPromptsPerSession(settings.promptsPerSession || 20);
       setSelectionType(settings.selectionType || "juzaa");
     }
 
@@ -187,6 +190,7 @@ export default function SetupPage() {
       selectedSurahs,
       selectionType,
       ayahsAfter,
+      promptsPerSession,
     };
     localStorage.setItem("quranReviewSettings", JSON.stringify(settings));
 
@@ -384,6 +388,37 @@ export default function SetupPage() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   Number of ayahs to show after the current ayah during review.
+                </p>
+              </div>
+
+              <Separator className="my-4" />
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <Label htmlFor="prompts-per-session" className="text-sm font-medium">
+                    Prompts Per Session
+                  </Label>
+                  <span>{promptsPerSession}</span>
+                </div>
+                <Slider
+                  id="prompts-per-session"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={[promptsPerSession]}
+                  onValueChange={(value) => setPromptsPerSession(value[0])}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>1</span>
+                  <span>10</span>
+                  <span>20</span>
+                  <span>30</span>
+                  <span>40</span>
+                  <span>50</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Number of review prompts to include in each review session (1-50 ayahs).
                 </p>
               </div>
             </div>
