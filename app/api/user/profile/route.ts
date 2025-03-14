@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     
     if (!session?.user?.id) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        { success: false, message: "Unauthorized", user: null },
         { status: 401 }
       );
     }
@@ -32,19 +32,19 @@ export async function GET(request: NextRequest) {
     
     if (!user) {
       return NextResponse.json(
-        { message: "User not found" },
+        { success: false, message: "User not found", user: null },
         { status: 404 }
       );
     }
     
     return NextResponse.json(
-      { user },
+      { success: true, user },
       { status: 200 }
     );
   } catch (error) {
     console.error("Error fetching user profile:", error);
     return NextResponse.json(
-      { message: "Error fetching user profile" },
+      { success: false, message: "Error fetching user profile", user: null },
       { status: 500 }
     );
   }
@@ -57,19 +57,45 @@ export async function PUT(request: NextRequest) {
     
     if (!session?.user?.id) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        { success: false, message: "Unauthorized", user: null },
         { status: 401 }
       );
     }
     
     const userId = session.user.id;
-    const body = await request.json();
     
-    // Update user profile
+    // Safely parse the request body
+    let body;
+    try {
+      const text = await request.text();
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { success: false, message: "Empty request body", user: null },
+          { status: 400 }
+        );
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON in request body", user: null },
+        { status: 400 }
+      );
+    }
+    
+    // Ensure body is not null or undefined
+    if (!body) {
+      return NextResponse.json(
+        { success: false, message: "Missing request body", user: null },
+        { status: 400 }
+      );
+    }
+    
+    // Update user profile with validation
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
-        name: body.name,
+        name: typeof body.name === 'string' ? body.name : undefined,
         // Note: We don't allow updating email or password here
       },
       select: {
@@ -81,13 +107,13 @@ export async function PUT(request: NextRequest) {
     });
     
     return NextResponse.json(
-      { user },
+      { success: true, user },
       { status: 200 }
     );
   } catch (error) {
     console.error("Error updating user profile:", error);
     return NextResponse.json(
-      { message: "Error updating user profile" },
+      { success: false, message: "Error updating user profile", user: null },
       { status: 500 }
     );
   }

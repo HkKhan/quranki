@@ -100,22 +100,62 @@ export async function getUserSettings(): Promise<QuranSettings> {
       // User is authenticated, ALWAYS try to fetch from database first
       try {
         console.log("Fetching settings from database...");
-        const response = await fetch('/api/user/settings');
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data.settings) {
-            console.log("Found settings in database");
-            // Found settings in database, mark migration as complete
-            markSettingsMigrationAsComplete();
-            return {
-              selectedJuzaa: data.settings.selectedJuzaa,
-              selectedSurahs: data.settings.selectedSurahs,
-              selectionType: data.settings.selectionType,
-              ayahsAfter: data.settings.ayahsAfter,
-              promptsPerSession: data.settings.promptsPerSession,
-            };
+        // Use a timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        
+        try {
+          const response = await fetch('/api/user/settings', {
+            signal: controller.signal,
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          });
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            // Safely parse the response
+            let data;
+            try {
+              const text = await response.text();
+              if (!text || text.trim() === '') {
+                console.log("Empty response from settings API");
+                // No valid response, fall back to defaults
+                return DEFAULT_SETTINGS;
+              }
+              
+              data = JSON.parse(text);
+            } catch (parseError) {
+              console.error("Error parsing settings response:", parseError);
+              return DEFAULT_SETTINGS;
+            }
+            
+            if (data && data.settings) {
+              console.log("Found settings in database");
+              // Found settings in database, mark migration as complete
+              markSettingsMigrationAsComplete();
+              return {
+                selectedJuzaa: data.settings.selectedJuzaa || DEFAULT_SETTINGS.selectedJuzaa,
+                selectedSurahs: data.settings.selectedSurahs || DEFAULT_SETTINGS.selectedSurahs,
+                selectionType: data.settings.selectionType || DEFAULT_SETTINGS.selectionType,
+                ayahsAfter: data.settings.ayahsAfter || DEFAULT_SETTINGS.ayahsAfter,
+                promptsPerSession: data.settings.promptsPerSession || DEFAULT_SETTINGS.promptsPerSession,
+              };
+            }
+          } else {
+            console.log("API returned error status:", response.status);
           }
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            console.log("Settings API request timed out");
+          } else {
+            console.error("Error fetching settings:", fetchError);
+          }
+          // Continue to fallback logic
         }
         
         // If we reach here, settings weren't found in the database
@@ -243,22 +283,52 @@ async function checkAuthentication(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   
   try {
+    // First, check if we're in a force reload cycle to avoid infinite loops
+    const forceReloadFlag = localStorage.getItem("quranki_force_reload");
+    if (forceReloadFlag === "true") {
+      console.log("In force reload cycle, skipping authentication check");
+      return false;
+    }
+    
     // Add a timeout to prevent hanging forever
     const controller = new AbortController();
     const signal = controller.signal;
     
-    // Set a timeout of 3 seconds
+    // Set a shorter timeout (2 seconds instead of 3)
     const timeout = setTimeout(() => {
       controller.abort();
-      console.warn("Authentication check timed out after 3 seconds");
-    }, 3000);
+      console.warn("Authentication check timed out after 2 seconds");
+    }, 2000);
     
     try {
-      const session = await fetch('/api/auth/session', { signal });
+      // Check if session exists
+      const session = await fetch('/api/auth/session', { 
+        signal,
+        // Prevent caching
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
       clearTimeout(timeout);
       
-      const sessionData = await session.json();
-      return !!sessionData?.user;
+      if (!session.ok) {
+        console.log("Session check returned non-OK response:", session.status);
+        return false;
+      }
+      
+      // Safely parse the response
+      let sessionData;
+      try {
+        sessionData = await session.json();
+      } catch (e) {
+        console.error("Error parsing session data:", e);
+        return false;
+      }
+      
+      // Explicitly check for a valid user object
+      return !!(sessionData && sessionData.user && sessionData.user.id);
     } catch (error: any) {
       clearTimeout(timeout);
       
@@ -267,7 +337,8 @@ async function checkAuthentication(): Promise<boolean> {
         return false;
       }
       
-      throw error;
+      console.error("Error in session fetch:", error);
+      return false;
     }
   } catch (error) {
     console.error("Error checking authentication:", error);
