@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { z } from "zod";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // Create a validation schema
 const registerSchema = z.object({
@@ -14,13 +12,30 @@ const registerSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    // Safely parse request body
+    let body;
+    try {
+      const text = await request.text();
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { success: false, message: "Empty request body" },
+          { status: 400 }
+        );
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
     
     // Validate input
     const result = registerSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { message: result.error.errors[0].message },
+        { success: false, message: result.error.errors[0].message },
         { status: 400 }
       );
     }
@@ -34,7 +49,7 @@ export async function POST(request: NextRequest) {
     
     if (existingUser) {
       return NextResponse.json(
-        { message: "Email already in use" },
+        { success: false, message: "Email already in use" },
         { status: 400 }
       );
     }
@@ -55,13 +70,13 @@ export async function POST(request: NextRequest) {
     const { password: _, ...userWithoutPassword } = user;
     
     return NextResponse.json(
-      { message: "User registered successfully", user: userWithoutPassword },
+      { success: true, message: "User registered successfully", user: userWithoutPassword },
       { status: 201 }
     );
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(
-      { message: "Error registering user" },
+      { success: false, message: "Error registering user" },
       { status: 500 }
     );
   }

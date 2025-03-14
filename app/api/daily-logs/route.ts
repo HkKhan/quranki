@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerAuthSession } from "@/lib/auth";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +10,7 @@ export async function GET(request: NextRequest) {
     
     if (!session?.user?.id) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        { success: false, message: "Unauthorized" },
         { status: 401 }
       );
     }
@@ -54,14 +53,14 @@ export async function GET(request: NextRequest) {
       
       if (aggregate) {
         // Group by date and sum up counts
-        const aggregatedLogs = dailyLogs.reduce((acc, log) => {
+        const aggregatedLogs = dailyLogs.reduce<Record<string, { date: string, count: number }>>((acc, log) => {
           const date = log.date;
           if (!acc[date]) {
             acc[date] = { date, count: 0 };
           }
           acc[date].count += log.count;
           return acc;
-        }, {} as Record<string, { date: string, count: number }>);
+        }, {});
         
         // Convert to array and sort by date (newest first)
         logs = Object.values(aggregatedLogs).sort((a, b) => 
@@ -92,13 +91,33 @@ export async function POST(request: NextRequest) {
     
     if (!session?.user?.id) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        { success: false, message: "Unauthorized" },
         { status: 401 }
       );
     }
     
     const userId = session.user.id;
-    const { date, ayahKey, count } = await request.json();
+    
+    // Safely parse request body
+    let body;
+    try {
+      const text = await request.text();
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { success: false, message: "Empty request body" },
+          { status: 400 }
+        );
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
+    
+    const { date, ayahKey, count } = body;
     
     if (!date || !ayahKey) {
       return NextResponse.json(
@@ -117,13 +136,13 @@ export async function POST(request: NextRequest) {
         }
       },
       update: {
-        count: count || 1
+        count: count ?? 1
       },
       create: {
         userId,
         date,
         ayahKey,
-        count: count || 1
+        count: count ?? 1
       }
     });
     

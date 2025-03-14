@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerAuthSession } from "@/lib/auth";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,13 +16,21 @@ export async function POST(request: NextRequest) {
     
     const userId = session.user.id;
     
+    // Safely parse request body
     let body;
     try {
-      body = await request.json();
-    } catch (error) {
-      console.log("Error parsing request body:", error);
+      const text = await request.text();
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { success: false, message: "Empty request body" },
+          { status: 400 }
+        );
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
       return NextResponse.json(
-        { success: false, message: "Invalid request body" },
+        { success: false, message: "Invalid JSON in request body" },
         { status: 400 }
       );
     }
@@ -44,7 +50,7 @@ export async function POST(request: NextRequest) {
       dailyLogs 
     } = body;
     
-    let migrationResults = {
+    const migrationResults = {
       settingsMigrated: false,
       spacedRepetitionMigrated: false,
       dailyLogsMigrated: false
@@ -55,19 +61,19 @@ export async function POST(request: NextRequest) {
       await prisma.quranReviewSettings.upsert({
         where: { userId },
         update: {
-          selectedJuzaa: quranSettings.selectedJuzaa || [],
-          selectedSurahs: quranSettings.selectedSurahs || [],
-          selectionType: quranSettings.selectionType || "juzaa",
-          ayahsAfter: quranSettings.ayahsAfter || 2,
-          promptsPerSession: quranSettings.promptsPerSession || 20,
+          selectedJuzaa: quranSettings.selectedJuzaa ?? [],
+          selectedSurahs: quranSettings.selectedSurahs ?? [],
+          selectionType: quranSettings.selectionType ?? "juzaa",
+          ayahsAfter: quranSettings.ayahsAfter ?? 2,
+          promptsPerSession: quranSettings.promptsPerSession ?? 20,
         },
         create: {
           userId,
-          selectedJuzaa: quranSettings.selectedJuzaa || [],
-          selectedSurahs: quranSettings.selectedSurahs || [],
-          selectionType: quranSettings.selectionType || "juzaa",
-          ayahsAfter: quranSettings.ayahsAfter || 2,
-          promptsPerSession: quranSettings.promptsPerSession || 20,
+          selectedJuzaa: quranSettings.selectedJuzaa ?? [],
+          selectedSurahs: quranSettings.selectedSurahs ?? [],
+          selectionType: quranSettings.selectionType ?? "juzaa",
+          ayahsAfter: quranSettings.ayahsAfter ?? 2,
+          promptsPerSession: quranSettings.promptsPerSession ?? 20,
         },
       });
       migrationResults.settingsMigrated = true;
@@ -87,13 +93,13 @@ export async function POST(request: NextRequest) {
             userId,
             surahNo: item.surahNo,
             ayahNoSurah: item.ayahNoSurah,
-            interval: item.interval || 1,
-            repetitions: item.repetitions || 0,
-            easeFactor: item.easeFactor || 2.5,
+            interval: item.interval ?? 1,
+            repetitions: item.repetitions ?? 0,
+            easeFactor: item.easeFactor ?? 2.5,
             lastReviewed: new Date(item.lastReviewed || Date.now()),
             dueDate: new Date(item.dueDate || Date.now()),
-            reviewDate: item.reviewDate,
-            selectionType: item.selectionType || "juzaa",
+            reviewDate: item.reviewDate ?? null,
+            selectionType: item.selectionType ?? "juzaa",
           },
         });
       }
@@ -114,7 +120,7 @@ export async function POST(request: NextRequest) {
             userId,
             date: log.date,
             ayahKey: log.ayahKey,
-            count: log.count || 1,
+            count: log.count ?? 1,
           },
         });
       }

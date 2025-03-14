@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerAuthSession } from "@/lib/auth";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +10,7 @@ export async function GET(request: NextRequest) {
     
     if (!session?.user?.id) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        { success: false, message: "Unauthorized" },
         { status: 401 }
       );
     }
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
     const isDue = searchParams.get("isDue");
     
     // Build the where clause based on filter parameters
-    let whereClause: any = { userId };
+    const whereClause: Prisma.SpacedRepetitionDataWhereInput = { userId };
     
     if (surahNo !== undefined) {
       whereClause.surahNo = surahNo;
@@ -69,13 +68,31 @@ export async function POST(request: NextRequest) {
     
     if (!session?.user?.id) {
       return NextResponse.json(
-        { message: "Unauthorized" },
+        { success: false, message: "Unauthorized" },
         { status: 401 }
       );
     }
     
     const userId = session.user.id;
-    const body = await request.json();
+    
+    // Safely parse request body
+    let body;
+    try {
+      const text = await request.text();
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { success: false, message: "Empty request body" },
+          { status: 400 }
+        );
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
     
     const { 
       surahNo, 
@@ -106,25 +123,25 @@ export async function POST(request: NextRequest) {
         }
       },
       update: {
-        interval: interval || 1,
-        repetitions: repetitions || 0,
-        easeFactor: easeFactor || 2.5,
+        interval: interval ?? 1,
+        repetitions: repetitions ?? 0,
+        easeFactor: easeFactor ?? 2.5,
         lastReviewed: lastReviewed ? new Date(lastReviewed) : new Date(),
         dueDate: dueDate ? new Date(dueDate) : new Date(),
-        reviewDate,
-        selectionType: selectionType || "juzaa"
+        reviewDate: reviewDate ?? null,
+        selectionType: selectionType ?? "juzaa"
       },
       create: {
         userId,
         surahNo,
         ayahNoSurah,
-        interval: interval || 1,
-        repetitions: repetitions || 0,
-        easeFactor: easeFactor || 2.5,
+        interval: interval ?? 1,
+        repetitions: repetitions ?? 0,
+        easeFactor: easeFactor ?? 2.5,
         lastReviewed: lastReviewed ? new Date(lastReviewed) : new Date(),
         dueDate: dueDate ? new Date(dueDate) : new Date(),
-        reviewDate,
-        selectionType: selectionType || "juzaa"
+        reviewDate: reviewDate ?? null,
+        selectionType: selectionType ?? "juzaa"
       }
     });
     
