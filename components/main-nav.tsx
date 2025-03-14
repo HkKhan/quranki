@@ -7,11 +7,14 @@ import { cn } from "@/lib/utils";
 import { BookOpen, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
+import { useSession } from "next-auth/react";
+import { UserAccountNav } from "@/components/auth/user-account-nav";
 
 export function MainNav() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
+  const { data: session } = useSession();
 
   // After hydration, we can safely show the UI that depends on the theme
   React.useEffect(() => {
@@ -41,16 +44,13 @@ export function MainNav() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center">
-        <div className="flex items-center mr-4">
-          <Link href="/" className="flex items-center space-x-2">
-            <BookOpen className="h-6 w-6" />
-            <span className="font-bold">QuranKi</span>
-          </Link>
-        </div>
-        <div className="flex-1"></div>
-        <nav className="flex items-center space-x-6 pr-6">
+    <div className="border-b">
+      <div className="flex h-16 items-center px-4 container">
+        <Link href="/" className="flex items-center gap-2 mr-6">
+          <BookOpen className="h-6 w-6" />
+          <span className="font-bold">QuranKi</span>
+        </Link>
+        <nav className="flex items-center space-x-4 lg:space-x-6 mx-6">
           {routes.map((route) => (
             <Link
               key={route.href}
@@ -58,35 +58,38 @@ export function MainNav() {
               className={cn(
                 "text-sm font-medium transition-colors hover:text-primary",
                 route.active
-                  ? "border-b-2 border-primary pb-2 text-foreground"
-                  : "text-foreground"
+                  ? "text-black dark:text-white"
+                  : "text-muted-foreground"
               )}
             >
               {route.label}
             </Link>
           ))}
         </nav>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleTheme}
-          className="ml-auto flex items-center gap-2"
-          aria-label={mounted ? (theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme") : "Toggle Theme"}
-        >
-          {mounted ? (
-            <>
-              {theme === "dark" ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )}
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
-            </>
+        <div className="ml-auto flex items-center space-x-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Toggle Theme"
+            className="mr-6"
+            onClick={toggleTheme}
+          >
+            {mounted && theme === "dark" ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            )}
+          </Button>
+          
+          {session?.user ? (
+            <UserAccountNav user={session.user} />
           ) : (
-            <span className="h-5 w-5" />
+            <Button asChild variant="default" size="sm">
+              <Link href="/auth/signin">Sign In</Link>
+            </Button>
           )}
-        </Button>
+        </div>
       </div>
-    </header>
+    </div>
   );
 }

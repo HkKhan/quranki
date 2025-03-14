@@ -77,94 +77,7 @@ export function ReviewHeatmap() {
       data.push({ date, count: 0, isDue: false });
     }
 
-    // Collect all review data
-    const allKeys = Object.keys(localStorage);
-    const reviewKeys = allKeys.filter((key) => key.startsWith("quranki_sr_"));
-    let totalReviews = 0;
-    let daysWithReviews = 0;
-    let yearReviews = 0;
-
-    reviewKeys.forEach((key) => {
-      const srDataStr = localStorage.getItem(key);
-      if (srDataStr) {
-        const srData: ReviewData = JSON.parse(srDataStr);
-
-        // Count past reviews
-        if (srData.lastReviewed) {
-          const reviewDate = new Date(srData.lastReviewed);
-
-          // Only count if in current year view
-          if (reviewDate.getFullYear() === currentYear) {
-            const dayOfYear = Math.floor(
-              (reviewDate.getTime() - startDate.getTime()) /
-                (1000 * 60 * 60 * 24)
-            );
-
-            if (dayOfYear >= 0 && dayOfYear < days) {
-              if (data[dayOfYear].count === 0) {
-                daysWithReviews++;
-              }
-              data[dayOfYear].count++;
-              yearReviews++;
-            }
-          }
-          totalReviews++;
-        }
-
-        // Count future due dates
-        if (srData.dueDate) {
-          const dueDate = new Date(srData.dueDate);
-          if (dueDate.getFullYear() === currentYear) {
-            const dueDateStr = dueDate.toDateString();
-            dueData[dueDateStr] = (dueData[dueDateStr] || 0) + 1;
-          }
-        }
-      }
-    });
-
-    // Calculate and set stats
-    const dailyAverage =
-      daysWithReviews > 0 ? yearReviews / daysWithReviews : 0;
-    setStats({
-      dailyAverage,
-      totalReviews: yearReviews,
-      daysWithReviews,
-    });
-
-    // Add due counts to data
-    data.forEach((day) => {
-      const dueCount = dueData[day.date.toDateString()] || 0;
-      if (dueCount > 0 && day.date >= today) {
-        day.isDue = true;
-        day.count = dueCount;
-      }
-    });
-
-    // Calculate color intensities
-    const maxCount = Math.max(...data.map((d) => d.count), 1); // Ensure non-zero max
-    const getColorIntensity = (count: number) => {
-      if (count === 0) return 0;
-      return Math.min(Math.ceil((count / maxCount) * 4), 4);
-    };
-
-    // Color schemes matching Anki
-    const pastColors = [
-      "rgb(238, 238, 238)", // 0 reviews
-      "rgb(219, 229, 241)", // 1-25% of max
-      "rgb(171, 194, 225)", // 26-50% of max
-      "rgb(132, 162, 216)", // 51-75% of max
-      "rgb(91, 132, 207)", // 76-100% of max
-    ];
-
-    const dueColors = [
-      "rgb(238, 238, 238)", // 0 due
-      "rgb(255, 219, 219)", // 1-25% of max
-      "rgb(255, 184, 184)", // 26-50% of max
-      "rgb(255, 149, 149)", // 51-75% of max
-      "rgb(255, 114, 114)", // 76-100% of max
-    ];
-
-    // Calendar layout constants
+    // Define constants for drawing (moved from inside the async function to here)
     const CANVAS_PADDING = 16;
     const CELL_SIZE = 11;
     const CELL_PADDING = 3;
@@ -173,129 +86,396 @@ export function ReviewHeatmap() {
     // Calculate grid dimensions
     const ROWS = 7;
     const COLS = Math.ceil(days / ROWS);
-    const gridWidth = COLS * TOTAL_CELL_SIZE;
-    const gridHeight = ROWS * TOTAL_CELL_SIZE;
 
     // Calculate starting position to center the grid
+    const gridWidth = COLS * TOTAL_CELL_SIZE;
     const startX =
       CANVAS_PADDING + (canvasWidth - 2 * CANVAS_PADDING - gridWidth) / 2;
     const startY = CANVAS_PADDING;
+    const gridHeight = ROWS * TOTAL_CELL_SIZE;
 
-    // Store cell positions for hover detection
-    const cellPositions: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      data: DayData;
-    }[] = [];
+    // Function to draw the heatmap
+    const drawHeatmap = (data: DayData[], statsData: { dailyAverage: number, totalReviews: number, daysWithReviews: number }) => {
+      // Calculate color intensities
+      const maxCount = Math.max(...data.map((d) => d.count), 1); // Ensure non-zero max
+      const getColorIntensity = (count: number) => {
+        if (count === 0) return 0;
+        return Math.min(Math.ceil((count / maxCount) * 4), 4);
+      };
 
-    // Draw cells
-    data.forEach((day, index) => {
-      const col = Math.floor(index / ROWS);
-      const row = index % ROWS;
+      // Color schemes matching Anki
+      const pastColors = [
+        "rgb(238, 238, 238)", // 0 reviews
+        "rgb(219, 229, 241)", // 1-25% of max
+        "rgb(171, 194, 225)", // 26-50% of max
+        "rgb(132, 162, 216)", // 51-75% of max
+        "rgb(91, 132, 207)", // 76-100% of max
+      ];
 
-      const x = startX + col * TOTAL_CELL_SIZE;
-      const y = startY + row * TOTAL_CELL_SIZE;
+      const dueColors = [
+        "rgb(238, 238, 238)", // 0 due
+        "rgb(255, 219, 219)", // 1-25% of max
+        "rgb(255, 184, 184)", // 26-50% of max
+        "rgb(255, 149, 149)", // 51-75% of max
+        "rgb(255, 114, 114)", // 76-100% of max
+      ];
 
-      // Store cell position
-      cellPositions.push({
-        x,
-        y,
-        width: CELL_SIZE,
-        height: CELL_SIZE,
-        data: day,
+      // Store cell positions for hover detection
+      const cellPositions: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        data: DayData;
+      }[] = [];
+
+      // Draw cells
+      data.forEach((day, index) => {
+        const col = Math.floor(index / ROWS);
+        const row = index % ROWS;
+
+        const x = startX + col * TOTAL_CELL_SIZE;
+        const y = startY + row * TOTAL_CELL_SIZE;
+
+        // Store cell position
+        cellPositions.push({
+          x,
+          y,
+          width: CELL_SIZE,
+          height: CELL_SIZE,
+          data: day,
+        });
+
+        const intensity = getColorIntensity(day.count);
+        const colorArray = day.isDue ? dueColors : pastColors;
+        const color = colorArray[intensity];
+
+        // Draw cell with rounded corners
+        ctx.fillStyle = color;
+        const radius = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + CELL_SIZE - radius, y);
+        ctx.quadraticCurveTo(x + CELL_SIZE, y, x + CELL_SIZE, y + radius);
+        ctx.lineTo(x + CELL_SIZE, y + CELL_SIZE - radius);
+        ctx.quadraticCurveTo(
+          x + CELL_SIZE,
+          y + CELL_SIZE,
+          x + CELL_SIZE - radius,
+          y + CELL_SIZE
+        );
+        ctx.lineTo(x + radius, y + CELL_SIZE);
+        ctx.quadraticCurveTo(x, y + CELL_SIZE, x, y + CELL_SIZE - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.fill();
+
+        // Highlight today
+        if (day.date.toDateString() === today.toDateString()) {
+          ctx.strokeStyle = "#374151";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       });
 
-      const intensity = getColorIntensity(day.count);
-      const colorArray = day.isDue ? dueColors : pastColors;
-      const color = colorArray[intensity];
+      // Draw legend at the bottom with proper spacing
+      const legendY = startY + gridHeight + 24;
+      ctx.font = "12px system-ui";
 
-      // Draw cell with rounded corners
-      ctx.fillStyle = color;
-      const radius = 2;
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + CELL_SIZE - radius, y);
-      ctx.quadraticCurveTo(x + CELL_SIZE, y, x + CELL_SIZE, y + radius);
-      ctx.lineTo(x + CELL_SIZE, y + CELL_SIZE - radius);
-      ctx.quadraticCurveTo(
-        x + CELL_SIZE,
-        y + CELL_SIZE,
-        x + CELL_SIZE - radius,
-        y + CELL_SIZE
-      );
-      ctx.lineTo(x + radius, y + CELL_SIZE);
-      ctx.quadraticCurveTo(x, y + CELL_SIZE, x, y + CELL_SIZE - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.fill();
+      // Use class-based colors that respect dark mode
+      const isDarkMode = document.documentElement.classList.contains("dark");
+      ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280"; // Light gray in dark mode, darker gray in light mode
 
-      // Highlight today
-      if (day.date.toDateString() === today.toDateString()) {
-        ctx.strokeStyle = "#374151";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    });
+      // Past reviews legend
+      ctx.fillText("Past Reviews:", startX, legendY);
+      pastColors.slice(1).forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(startX + 100 + i * 30, legendY - 12, 24, 10);
+      });
 
-    // Draw legend at the bottom with proper spacing
-    const legendY = startY + gridHeight + 24;
-    ctx.font = "12px system-ui";
+      // Future due legend
+      ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
+      ctx.fillText("Due:", startX + canvasWidth / 2 - CANVAS_PADDING, legendY);
+      dueColors.slice(1).forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(
+          startX + canvasWidth / 2 - CANVAS_PADDING + 40 + i * 30,
+          legendY - 12,
+          24,
+          10
+        );
+      });
 
-    // Use class-based colors that respect dark mode
-    // We'll need to detect the current theme by checking a data attribute
-    const isDarkMode = document.documentElement.classList.contains("dark");
-    ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280"; // Light gray in dark mode, darker gray in light mode
+      // Add hover effect handler
+      const handleMouseMove = (e: MouseEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
 
-    // Past reviews legend
-    ctx.fillText("Past Reviews:", startX, legendY);
-    pastColors.slice(1).forEach((color, i) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(startX + 100 + i * 30, legendY - 12, 24, 10);
-    });
+        // Find hovered cell
+        const hoveredCell = cellPositions.find(
+          (cell) =>
+            x >= cell.x &&
+            x <= cell.x + cell.width &&
+            y >= cell.y &&
+            y <= cell.y + cell.height
+        );
 
-    // Future due legend
-    ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
-    ctx.fillText("Due:", startX + canvasWidth / 2 - CANVAS_PADDING, legendY);
-    dueColors.slice(1).forEach((color, i) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(
-        startX + canvasWidth / 2 - CANVAS_PADDING + 40 + i * 30,
-        legendY - 12,
-        24,
-        10
-      );
-    });
+        if (hoveredCell) {
+          setHoveredDay(hoveredCell.data);
+          setMousePos({
+            x: hoveredCell.x + hoveredCell.width / 2, // Center horizontally
+            y: hoveredCell.y + hoveredCell.height + 5, // Just below the cell
+          });
+        } else {
+          setHoveredDay(null);
+        }
+      };
 
-    // Add hover effect handler
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      canvas.addEventListener("mousemove", handleMouseMove);
 
-      // Find hovered cell
-      const hoveredCell = cellPositions.find(
-        (cell) =>
-          x >= cell.x &&
-          x <= cell.x + cell.width &&
-          y >= cell.y &&
-          y <= cell.y + cell.height
-      );
+      // Update stats state
+      setStats(statsData);
 
-      if (hoveredCell) {
-        setHoveredDay(hoveredCell.data);
-        setMousePos({
-          x: hoveredCell.x + hoveredCell.width / 2, // Center horizontally
-          y: hoveredCell.y + hoveredCell.height + 5, // Just below the cell
-        });
-      } else {
-        setHoveredDay(null);
-      }
+      return () => canvas.removeEventListener("mousemove", handleMouseMove);
     };
 
-    canvas.addEventListener("mousemove", handleMouseMove);
-    return () => canvas.removeEventListener("mousemove", handleMouseMove);
+    // Check if user is authenticated and fetch data from the database
+    const loadData = async () => {
+      try {
+        // First try to get data from the database
+        const session = await fetch('/api/auth/session');
+        const sessionData = await session.json();
+        const isAuthenticated = !!sessionData?.user;
+        
+        if (isAuthenticated) {
+          // Fetch daily logs from the database
+          const logsResponse = await fetch('/api/daily-logs?aggregate=true');
+          
+          if (logsResponse.ok) {
+            const logsData = await logsResponse.json();
+            
+            if (logsData.success && logsData.logs) {
+              let yearReviews = 0;
+              let daysWithReviews = 0;
+              let totalReviews = 0;
+              
+              // Process logs for the current year
+              logsData.logs.forEach((log: any) => {
+                const logDate = new Date(log.date);
+                
+                // Only count if in current year view
+                if (logDate.getFullYear() === currentYear) {
+                  const dayOfYear = Math.floor(
+                    (logDate.getTime() - startDate.getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  );
+                  
+                  if (dayOfYear >= 0 && dayOfYear < days) {
+                    if (data[dayOfYear].count === 0) {
+                      daysWithReviews++;
+                    }
+                    data[dayOfYear].count += log.count;
+                    yearReviews += log.count;
+                  }
+                }
+                
+                totalReviews += log.count;
+              });
+              
+              // Fetch upcoming due items
+              const dueResponse = await fetch('/api/spaced-repetition?isDue=false'); // Get ALL items, not just due ones
+              if (dueResponse.ok) {
+                const dueItems = await dueResponse.json();
+                
+                if (dueItems.success && dueItems.spacedRepetitionData) {
+                  // Create a map to count due items by date
+                  const dueDateCounts: Record<string, number> = {};
+                  
+                  // Process due items from the database
+                  dueItems.spacedRepetitionData.forEach((item: any) => {
+                    // Convert string date to Date object
+                    const dueDate = new Date(item.dueDate);
+                    
+                    // Only process if in current year view AND is in the future (not today or past)
+                    if (dueDate.getFullYear() === currentYear && dueDate > today) {
+                      const dateStr = dueDate.toISOString().split('T')[0];
+                      
+                      // Count items due on each date
+                      if (!dueDateCounts[dateStr]) {
+                        dueDateCounts[dateStr] = 0;
+                      }
+                      dueDateCounts[dateStr]++;
+                      
+                      // Get the day of year for this due date
+                      const dayOfYear = Math.floor(
+                        (dueDate.getTime() - startDate.getTime()) /
+                          (1000 * 60 * 60 * 24)
+                      );
+                      
+                      // Make sure it's a valid day in our data array
+                      if (dayOfYear >= 0 && dayOfYear < days) {
+                        // Mark as due
+                        data[dayOfYear].isDue = true;
+                        
+                        // Set count based on how many items are due that day
+                        // This ensures intensity corresponds to review load
+                        data[dayOfYear].count = dueDateCounts[dateStr];
+                      }
+                    }
+                  });
+                }
+              }
+              
+              // Replace handling for today - don't mark today as due by default
+              const todayDayOfYear = Math.floor(
+                (today.getTime() - startDate.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
+              
+              // If today has reviews, it should be blue, not red
+              if (todayDayOfYear >= 0 && todayDayOfYear < days && data[todayDayOfYear].count > 0) {
+                data[todayDayOfYear].isDue = false;
+              }
+              
+              // Calculate and prepare stats
+              const dailyAverage = daysWithReviews > 0 ? yearReviews / daysWithReviews : 0;
+              const statsData = {
+                dailyAverage,
+                totalReviews: yearReviews,
+                daysWithReviews,
+              };
+              
+              // Draw the heatmap with the data
+              drawHeatmap(data, statsData);
+              return; // Exit early since we've processed database data
+            }
+          }
+        }
+        
+        // If not authenticated or failed to fetch from database, fall back to localStorage
+        processLocalStorageData();
+        
+      } catch (error) {
+        console.error("Error fetching review data:", error);
+        // Fall back to localStorage
+        processLocalStorageData();
+      }
+    };
+    
+    // Function to process localStorage data (existing logic)
+    const processLocalStorageData = () => {
+      // Collect all review data
+      const allKeys = Object.keys(localStorage);
+      const reviewKeys = allKeys.filter((key) => key.startsWith("quranki_sr_"));
+      let totalReviews = 0;
+      let daysWithReviews = 0;
+      let yearReviews = 0;
+
+      // Count future due dates
+      const futureDueDates: Record<string, number> = {};
+      
+      reviewKeys.forEach((key) => {
+        const srDataStr = localStorage.getItem(key);
+        if (srDataStr) {
+          const srData: ReviewData = JSON.parse(srDataStr);
+
+          // Count past reviews
+          if (srData.lastReviewed) {
+            const reviewDate = new Date(srData.lastReviewed);
+
+            // Only count if in current year view
+            if (reviewDate.getFullYear() === currentYear) {
+              const dayOfYear = Math.floor(
+                (reviewDate.getTime() - startDate.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
+
+              if (dayOfYear >= 0 && dayOfYear < days) {
+                if (data[dayOfYear].count === 0) {
+                  daysWithReviews++;
+                }
+                data[dayOfYear].count++;
+                yearReviews++;
+              }
+            }
+            totalReviews++;
+          }
+
+          // Count future due dates
+          if (srData.dueDate) {
+            const dueDate = new Date(srData.dueDate);
+            // Only process if in current year view AND is in the future (not today or past)
+            if (dueDate.getFullYear() === currentYear && dueDate > today) {
+              // Track counts by date string
+              const dateStr = dueDate.toISOString().split('T')[0];
+              if (!futureDueDates[dateStr]) {
+                futureDueDates[dateStr] = 0;
+              }
+              futureDueDates[dateStr]++;
+              
+              const dayOfYear = Math.floor(
+                (dueDate.getTime() - startDate.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
+              
+              if (dayOfYear >= 0 && dayOfYear < days) {
+                // Mark as due
+                data[dayOfYear].isDue = true;
+                
+                // Set count based on how many items are due that day
+                data[dayOfYear].count = futureDueDates[dateStr];
+              }
+            }
+          }
+        }
+      });
+
+      // Also check daily logs in localStorage
+      allKeys.filter(key => key.startsWith("quranki_daily_log_")).forEach(key => {
+        const date = key.replace("quranki_daily_log_", "");
+        const logDate = new Date(date);
+        
+        // Only count if in current year view
+        if (logDate.getFullYear() === currentYear) {
+          const logData = localStorage.getItem(key);
+          if (logData) {
+            const log = JSON.parse(logData);
+            const reviewCount = Object.keys(log).length;
+            
+            if (reviewCount > 0) {
+              const dayOfYear = Math.floor(
+                (logDate.getTime() - startDate.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
+              
+              if (dayOfYear >= 0 && dayOfYear < days) {
+                if (data[dayOfYear].count === 0) {
+                  daysWithReviews++;
+                }
+                data[dayOfYear].count += reviewCount;
+                yearReviews += reviewCount;
+              }
+            }
+          }
+        }
+      });
+
+      // Calculate and prepare stats
+      const dailyAverage = daysWithReviews > 0 ? yearReviews / daysWithReviews : 0;
+      const statsData = {
+        dailyAverage,
+        totalReviews: yearReviews,
+        daysWithReviews,
+      };
+      
+      // Draw the heatmap with the data
+      drawHeatmap(data, statsData);
+    };
+    
+    // Start the data loading process
+    loadData();
+    
   }, [currentYear]);
 
   return (

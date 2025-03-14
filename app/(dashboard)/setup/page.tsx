@@ -26,6 +26,7 @@ import {
   BookText,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { getUserSettings, saveUserSettings } from "@/lib/settings-service";
 
 // Interface for Surah type
 interface SurahInfo {
@@ -64,17 +65,22 @@ export default function SetupPage() {
   ];
 
   useEffect(() => {
-    // Load existing settings if available
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      const settings = JSON.parse(savedSettings);
-      setSelectedJuzaa(settings.selectedJuzaa || []);
-      setSelectedSurahs(settings.selectedSurahs || []);
-      setAyahsAfter(settings.ayahsAfter || 2);
-      setPromptsPerSession(settings.promptsPerSession || 20);
-      setSelectionType(settings.selectionType || "juzaa");
+    // Load settings from the service instead of localStorage
+    async function loadSettings() {
+      try {
+        const userSettings = await getUserSettings();
+        setSelectedJuzaa(userSettings.selectedJuzaa || []);
+        setSelectedSurahs(userSettings.selectedSurahs || []);
+        setAyahsAfter(userSettings.ayahsAfter || 2);
+        setPromptsPerSession(userSettings.promptsPerSession || 20);
+        setSelectionType(userSettings.selectionType || "juzaa");
+      } catch (error) {
+        console.error("Error loading user settings:", error);
+      }
     }
 
+    loadSettings();
+    
     // Load all surahs
     loadSurahs();
 
@@ -184,7 +190,7 @@ export default function SetupPage() {
 
     setIsSaving(true);
 
-    // Save settings to localStorage
+    // Create settings object
     const settings = {
       selectedJuzaa,
       selectedSurahs,
@@ -192,10 +198,12 @@ export default function SetupPage() {
       ayahsAfter,
       promptsPerSession,
     };
-    localStorage.setItem("quranReviewSettings", JSON.stringify(settings));
 
-    // Verify that we can load ayahs from the selected items
     try {
+      // Save settings using our service
+      await saveUserSettings(settings);
+
+      // Verify that we can load ayahs from the selected items
       let response;
       if (selectionType === "juzaa") {
         response = await fetch(
@@ -218,7 +226,7 @@ export default function SetupPage() {
       // Navigate to dashboard on success
       router.push("/dashboard");
     } catch (error) {
-      console.error("Error verifying selection:", error);
+      console.error("Error saving settings:", error);
       setIsSaving(false);
     }
   };

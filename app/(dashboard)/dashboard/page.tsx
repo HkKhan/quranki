@@ -23,6 +23,9 @@ import {
 } from "lucide-react";
 import { ReviewHeatmap } from "@/components/review-heatmap";
 import { StatsCards } from "@/components/stats-cards";
+import { getSession } from "@/lib/auth";
+import { getUserSettings, QuranSettings, useSettingsChangeTracker } from "@/lib/settings-service";
+import { getDueAyahs } from "@/lib/spaced-repetition-service";
 
 interface QuranStats {
   totalAyahs: number;
@@ -46,12 +49,7 @@ interface ReviewData {
 }
 
 export default function DashboardPage() {
-  const [settings, setSettings] = useState<{
-    selectedJuzaa: number[];
-    selectedSurahs: number[];
-    selectionType: "juzaa" | "surah";
-    ayahsAfter: number;
-  } | null>(null);
+  const [settings, setSettings] = useState<QuranSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [quranStats, setQuranStats] = useState<QuranStats>({
     totalAyahs: 0,
@@ -66,42 +64,59 @@ export default function DashboardPage() {
     dailyAverage: 0,
   });
   const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
+  
+  // Track settings changes
+  const settingsVersion = useSettingsChangeTracker();
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
+  // Define functions first, then use them in useEffect
+  const fetchUserSettings = async () => {
+    try {
+      // Use the settings service to get user settings
+      const userSettings = await getUserSettings();
+      return userSettings;
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+      return null;
+    }
+  };
 
   const loadDashboardData = async () => {
-    // Skip localStorage access during server-side rendering
-    if (typeof window === "undefined") {
-      setIsLoading(false);
-      return;
-    }
+    try {
+      setIsLoading(true);
+      
+      // Load settings using our service instead of localStorage
+      const userSettings = await fetchUserSettings();
+      
+      if (userSettings) {
+        setSettings(userSettings);
 
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      const parsedSettings = JSON.parse(savedSettings);
-      setSettings(parsedSettings);
+        // Fetch stats for the selected juzaa or surahs
+        if (userSettings.selectionType === "juzaa") {
+          await fetchQuranStats(userSettings.selectedJuzaa);
+        } else {
+          await fetchQuranStatsBySurah(userSettings.selectedSurahs);
+        }
 
-      // Fetch stats for the selected juzaa or surahs
-      if (parsedSettings.selectionType === "juzaa") {
-        await fetchQuranStats(parsedSettings.selectedJuzaa);
-      } else {
-        await fetchQuranStatsBySurah(parsedSettings.selectedSurahs);
-      }
-
-      // Load all surahs info if selection type is "surah"
-      if (parsedSettings.selectionType === "surah") {
-        await loadAllSurahs();
+        // Load all surahs info if selection type is "surah"
+        if (userSettings.selectionType === "surah") {
+          await loadAllSurahs();
+        }
       }
 
       // Calculate combined review statistics from all ayahs (both juzaa and surah)
-      calculateAllReviewStats();
+      await calculateAllReviewStats();
+      
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
+
+  // Load dashboard data when the component mounts or when settings change
+  useEffect(() => {
+    loadDashboardData();
+  }, [settingsVersion]); // Now depends on settingsVersion
 
   const loadAllSurahs = async () => {
     try {
@@ -152,24 +167,83 @@ export default function DashboardPage() {
   // Calculate review stats for all ayahs reviewed regardless of selection type
   const calculateAllReviewStats = async () => {
     try {
+      // Current date information
+      const now = Date.now();
+      const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Check if user is authenticated
+      const isAuthenticated = await checkAuthentication();
+      
+      if (isAuthenticated) {
+        // Force fresh data fetch every time for authenticated users
+        try {
+          // 1. Get due ayahs from the database using the service
+          const dueAyahs = await getDueAyahs();
+          const dueToday = dueAyahs.length;
+          
+          // 2. Fetch daily logs from the database to calculate streaks and totals
+          const logsResponse = await fetch('/api/daily-logs?aggregate=true');
+          
+          if (logsResponse.ok) {
+            const logsData = await logsResponse.json();
+            
+            if (logsData.success && logsData.logs) {
+              // Process data for statistics
+              const reviewDays = new Set<string>();
+              const dailyReviews: Record<string, number> = {};
+              let totalReviewed = 0;
+              
+              // Process logs from the database
+              logsData.logs.forEach((log: any) => {
+                const date = log.date;
+                reviewDays.add(date);
+                
+                if (!dailyReviews[date]) {
+                  dailyReviews[date] = 0;
+                }
+                dailyReviews[date] += log.count;
+                totalReviewed += log.count;
+              });
+              
+              // Calculate streak based on daily logs
+              const streak = calculateStreak(reviewDays, today);
+              
+              // Calculate daily average from the logs
+              const dailyAverage = calculateDailyAverage(dailyReviews);
+              
+              // Update stats state with fresh database data
+              setReviewStats({
+                dueToday,
+                reviewedToday: dailyReviews[today] || 0,
+                streak,
+                totalReviewed,
+                dailyAverage,
+              });
+              
+              return; // Exit early since we've successfully fetched and processed database data
+            }
+          }
+          // If database fetch fails, fall through to localStorage
+        } catch (error) {
+          console.error("Error fetching review stats from database:", error);
+          // Will fall back to localStorage
+        }
+      }
+      
+      // Fall back to localStorage if not authenticated or if database fetch failed
+      const dueAyahs = await getDueAyahs(); // This will use localStorage for non-authenticated users
+      const dueToday = dueAyahs.length;
+      
+      // Process localStorage for stats
+      const reviewDays = new Set<string>();
+      const dailyReviews: Record<string, number> = {};
+      let totalReviewed = 0;
+      
       // Skip localStorage access during server-side rendering
       if (typeof window === "undefined") {
         return;
       }
-
-      // For tracking streaks and daily activity
-      const reviewDays = new Set<string>();
-      const dailyReviews: Record<string, number> = {};
-      let totalReviewed = 0;
-      let dueToday = 0;
       
-      // Current date information
-      const now = Date.now();
-      const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
-      const startOfDay = new Date(now).setHours(0, 0, 0, 0);
-      const endOfDay = new Date(now).setHours(23, 59, 59, 999);
-      
-      // Get all keys in localStorage for SR data and daily logs
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
@@ -179,11 +253,8 @@ export default function DashboardPage() {
           const srDataStr = localStorage.getItem(key);
           if (srDataStr) {
             const srData = JSON.parse(srDataStr);
-            totalReviewed++;
-            
-            // Check if due today
-            if (srData.dueDate >= startOfDay && srData.dueDate <= endOfDay) {
-              dueToday++;
+            if (srData.repetitions > 0) {
+              totalReviewed++;
             }
             
             // Record the review date for streak calculation
@@ -207,61 +278,116 @@ export default function DashboardPage() {
           if (logData) {
             const log = JSON.parse(logData);
             const ayahsReviewedThisDay = Object.keys(log).length;
-            dailyReviews[date] = ayahsReviewedThisDay;
             
-            // Count today's reviews
-            if (date === today) {
-              dailyReviews[today] = Object.keys(log).length;
+            if (!dailyReviews[date]) {
+              dailyReviews[date] = ayahsReviewedThisDay;
             }
           }
         }
       }
       
-      // Calculate streak (consecutive days of review)
-      const sortedDates = Array.from(reviewDays).sort((a, b) => b.localeCompare(a)); // Sort newest to oldest
-      let streak = 0;
-      
-      if (sortedDates.length > 0) {
-        // Check if user reviewed today
-        const hasReviewedToday = sortedDates[0] === today;
-        let currentDateObj = hasReviewedToday 
-          ? new Date() 
-          : new Date(sortedDates[0] + "T00:00:00Z");
-        
-        for (const dateStr of sortedDates) {
-          const dateObj = new Date(dateStr + "T00:00:00Z");
-          const daysDiff = Math.round(
-            (currentDateObj.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24)
-          );
-          
-          if (daysDiff <= 1) {
-            streak++;
-            currentDateObj = dateObj;
-          } else {
-            break; // Streak is broken
-          }
-        }
-      }
-      
-      // Calculate daily average
-      const daysWithActivity = Object.keys(dailyReviews).length;
-      const totalDailyReviews = Object.values(dailyReviews).reduce((sum, count) => sum + count, 0);
-      const dailyAverage = daysWithActivity > 0 
-        ? totalDailyReviews / daysWithActivity 
-        : 0;
-        
-      // Calculate today's reviews
-      const reviewedToday = dailyReviews[today] || 0;
+      // Calculate streak, daily average, and update stats state
+      const streak = calculateStreak(reviewDays, today);
+      const dailyAverage = calculateDailyAverage(dailyReviews);
       
       setReviewStats({
         dueToday,
-        reviewedToday,
+        reviewedToday: dailyReviews[today] || 0,
         streak,
         totalReviewed,
-        dailyAverage: Math.round(dailyAverage * 10) / 10, // Round to 1 decimal place
+        dailyAverage,
       });
     } catch (error) {
       console.error("Error calculating review stats:", error);
+    }
+  };
+  
+  // Helper function to calculate streak
+  const calculateStreak = (reviewDays: Set<string>, today: string): number => {
+    const sortedDates = Array.from(reviewDays).sort((a, b) => b.localeCompare(a)); // Sort newest to oldest
+    let streak = 0;
+    
+    if (sortedDates.length > 0) {
+      // Check if user reviewed today
+      const hasReviewedToday = sortedDates[0] === today;
+      
+      // Start date to check from (today or yesterday)
+      let currentDate = new Date();
+      if (!hasReviewedToday) {
+        currentDate.setDate(currentDate.getDate() - 1); // Start from yesterday if no reviews today
+      }
+      
+      // Continue checking previous days
+      let checkingDate = currentDate;
+      let consecutiveDays = 0;
+      
+      while (true) {
+        const dateString = checkingDate.toISOString().split('T')[0];
+        if (reviewDays.has(dateString)) {
+          consecutiveDays++;
+          checkingDate.setDate(checkingDate.getDate() - 1); // Check previous day
+        } else {
+          break; // Streak ends
+        }
+      }
+      
+      streak = consecutiveDays;
+    }
+    
+    return streak;
+  };
+  
+  // Helper function to check user authentication
+  const checkAuthentication = async (): Promise<boolean> => {
+    try {
+      const session = await fetch('/api/auth/session');
+      const sessionData = await session.json();
+      return !!sessionData?.user;
+    } catch (error) {
+      console.error("Error checking authentication:", error);
+      return false;
+    }
+  };
+
+  // Calculate daily average reviews over the last 30 days
+  const calculateDailyAverage = (dailyReviews: Record<string, number>): number => {
+    try {
+      const today = new Date();
+      let totalReviews = 0;
+      let daysToConsider = 30; // Default to 30 days
+      
+      // If user has less than 30 days of review history, use days since first review
+      if (Object.keys(dailyReviews).length > 0) {
+        // Get all dates and sort chronologically (oldest first)
+        const dates = Object.keys(dailyReviews).sort();
+        const firstReviewDate = new Date(dates[0]);
+        
+        // Calculate days since first review (including today)
+        const daysSinceFirstReview = Math.floor(
+          (today.getTime() - firstReviewDate.getTime()) / (1000 * 60 * 60 * 24)
+        ) + 1;
+        
+        // Use daysSinceFirstReview if less than 30, otherwise stick with 30
+        daysToConsider = Math.min(Math.max(daysSinceFirstReview, 1), 30);
+      }
+      
+      // Calculate for the days to consider (either 30 days or days since first review)
+      for (let i = 0; i < daysToConsider; i++) {
+        const checkDate = new Date(today);
+        checkDate.setDate(checkDate.getDate() - i);
+        const dateString = checkDate.toISOString().split('T')[0];
+        
+        if (dailyReviews[dateString]) {
+          totalReviews += dailyReviews[dateString];
+        }
+      }
+      
+      // Calculate the average (avoid division by zero)
+      const average = totalReviews / daysToConsider;
+      return parseFloat(average.toFixed(1)); // Round to 1 decimal place
+    } catch (error) {
+      console.error("Error calculating daily average:", error);
+      return 0;
     }
   };
 

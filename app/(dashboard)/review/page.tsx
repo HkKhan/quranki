@@ -24,6 +24,8 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { updateSpacedRepetition, getSpacedRepetitionData } from "@/lib/spaced-repetition-service";
+import { getUserSettings, QuranSettings } from "@/lib/settings-service";
 
 interface QuranAyah {
   surah_no: number;
@@ -49,6 +51,7 @@ type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 export default function ReviewPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [ayahs, setAyahs] = useState<any[]>([]);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
   const [showTranslation, setShowTranslation] = useState(false);
@@ -58,39 +61,46 @@ export default function ReviewPage() {
   const [reviewedCount, setReviewedCount] = useState(0);
   const [nextAyahs, setNextAyahs] = useState<QuranAyah[]>([]);
   const [prevAyahs, setPrevAyahs] = useState<QuranAyah[]>([]);
-  const [settings, setSettings] = useState(() => {
-    // Initialize settings from localStorage or use defaults
-    if (typeof window === "undefined") {
-      return {
-        selectedJuzaa: [30],
-        selectedSurahs: [],
-        selectionType: "juzaa",
-        ayahsAfter: 2,
-        promptsPerSession: 20,
-      };
-    }
-
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      return JSON.parse(savedSettings);
-    }
-    return {
-      selectedJuzaa: [30],
-      selectedSurahs: [],
-      selectionType: "juzaa",
-      ayahsAfter: 2,
-      promptsPerSession: 20,
-    };
+  const [settings, setSettings] = useState<QuranSettings>({
+    selectedJuzaa: [30],
+    selectedSurahs: [],
+    selectionType: "juzaa",
+    ayahsAfter: 2,
+    promptsPerSession: 20,
   });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAyahs();
+    // Load settings from the service
+    async function loadSettings() {
+      try {
+        setIsLoading(true);
+        const userSettings = await getUserSettings();
+        console.log("Loaded user settings:", userSettings);
+        setSettings(userSettings);
+        setSettingsLoaded(true);
+      } catch (error) {
+        console.error("Error loading user settings:", error);
+        setSettingsLoaded(true); // Still mark settings as loaded even on error
+      }
+    }
+    
+    loadSettings();
   }, []);
+
+  // Only load ayahs after settings are loaded
+  useEffect(() => {
+    if (settingsLoaded) {
+      loadAyahs();
+    }
+  }, [settingsLoaded]);
 
   const loadAyahs = async () => {
     setIsLoading(true);
     try {
+      // Log settings being used
+      console.log("Using settings for loadAyahs:", settings);
+      
       let response;
       
       // Use the configured promptsPerSession or default to 20 if not set
@@ -118,28 +128,26 @@ export default function ReviewPage() {
         return;
       }
 
-      // Load spaced repetition data for each ayah
-      const ayahsWithSR = data.ayahs.map((ayah: QuranAyah) => {
-        // Skip localStorage access during server-side rendering
-        if (typeof window === "undefined") {
-          return ayah;
-        }
-
-        const storageKey = `quranki_sr_${ayah.surah_no}_${ayah.ayah_no_surah}`;
-        const srData = localStorage.getItem(storageKey);
-        if (srData) {
-          const parsed = JSON.parse(srData);
+      // Load spaced repetition data for each ayah using our service
+      const ayahsWithSRPromises = data.ayahs.map(async (ayah: QuranAyah) => {
+        try {
+          const srData = await getSpacedRepetitionData(ayah.surah_no, ayah.ayah_no_surah);
           return {
             ...ayah,
-            interval: parsed.interval,
-            repetitions: parsed.repetitions,
-            easeFactor: parsed.easeFactor,
-            lastReviewed: parsed.lastReviewed,
-            dueDate: parsed.dueDate,
+            interval: srData.interval,
+            repetitions: srData.repetitions,
+            easeFactor: srData.easeFactor,
+            lastReviewed: srData.lastReviewed,
+            dueDate: srData.dueDate,
           };
+        } catch (e) {
+          console.error("Error loading SR data for ayah:", e);
+          // Return the original ayah if there's an error
+          return ayah;
         }
-        return ayah;
       });
+
+      const ayahsWithSR = await Promise.all(ayahsWithSRPromises);
 
       setAyahs(ayahsWithSR);
       setReviewAyahs(ayahsWithSR);
@@ -230,113 +238,47 @@ export default function ReviewPage() {
     setReviewStatus("answer");
   };
 
-  const handleRating = (remembered: boolean) => {
+  const handleRating = async (remembered: boolean) => {
     const currentAyah = reviewAyahs[currentAyahIndex];
-
-    // Initialize spaced repetition values if they don't exist
-    if (!currentAyah.interval) currentAyah.interval = 0;
-    if (!currentAyah.repetitions) currentAyah.repetitions = 0;
-    if (!currentAyah.easeFactor) currentAyah.easeFactor = 2.5; // Initial ease factor
-
-    // Convert remembered boolean to Anki-style rating (1 for false, 3 for true)
-    const quality = remembered ? 3 : 1;
-
-    // Apply SM-2 algorithm
-    let nextInterval: number;
-    let nextEaseFactor = currentAyah.easeFactor;
-    let nextRepetitions = currentAyah.repetitions;
-
-    if (quality < 2) {
-      // Failed to remember (1)
-      nextRepetitions = 0;
-      nextInterval = 1; // Reset to 1 day
-    } else {
-      // Remembered (3)
-      nextRepetitions += 1;
-
-      // Calculate next interval
-      if (nextRepetitions === 1) {
-        nextInterval = 1;
-      } else if (nextRepetitions === 2) {
-        nextInterval = 6;
-      } else {
-        nextInterval = Math.round(
-          currentAyah.interval * currentAyah.easeFactor
-        );
-      }
-
-      // Update ease factor
-      nextEaseFactor =
-        currentAyah.easeFactor +
-        (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
-      nextEaseFactor = Math.max(1.3, nextEaseFactor); // Minimum ease factor is 1.3
-    }
-
-    // Update the ayah with new spaced repetition values
-    const updatedAyah = {
-      ...currentAyah,
-      interval: nextInterval,
-      repetitions: nextRepetitions,
-      easeFactor: nextEaseFactor,
-      lastReviewed: Date.now(),
-      dueDate: Date.now() + nextInterval * 24 * 60 * 60 * 1000, // Convert days to milliseconds
-    };
-
-    // Update the ayah in the review list
-    const updatedReviewAyahs = [...reviewAyahs];
-    updatedReviewAyahs[currentAyahIndex] = updatedAyah;
-    setReviewAyahs(updatedReviewAyahs);
-
-    // Store the updated spaced repetition data in localStorage
-    // Skip localStorage access during server-side rendering
-    if (typeof window !== "undefined") {
-      const storageKey = `quranki_sr_${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
-
-      // Also save review date to a daily log for better statistics tracking
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-      const dailyLogKey = `quranki_daily_log_${today}`;
-      
-      // Save SR data for this specific ayah
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          interval: updatedAyah.interval,
-          repetitions: updatedAyah.repetitions,
-          easeFactor: updatedAyah.easeFactor,
-          lastReviewed: updatedAyah.lastReviewed,
-          dueDate: updatedAyah.dueDate,
-          selectionType: settings.selectionType, // Track which selection type was used
-          reviewDate: today,
-        })
+    
+    // Convert remembered boolean to quality rating
+    // Type must be one of: "EASY" | "GOOD" | "HARD" | "AGAIN"
+    const quality = remembered ? "GOOD" : "AGAIN";
+    
+    try {
+      // Use the spaced repetition service to update the data
+      // This will save to both database (if authenticated) and localStorage
+      await updateSpacedRepetition(
+        currentAyah.surah_no,
+        currentAyah.ayah_no_surah,
+        quality,
+        settings.selectionType as "juzaa" | "surah"
       );
       
-      // Update daily log
-      let dailyLog: Record<string, number> = {};
-      const existingLog = localStorage.getItem(dailyLogKey);
-      if (existingLog) {
-        dailyLog = JSON.parse(existingLog);
-      }
+      // Update the UI
+      setReviewedCount((prev) => prev + 1);
       
-      // Add or increment ayah count
-      const ayahKey = `${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
-      if (dailyLog[ayahKey]) {
-        dailyLog[ayahKey]++;
+      if (currentAyahIndex < reviewAyahs.length - 1) {
+        const nextIndex = currentAyahIndex + 1;
+        setCurrentAyahIndex(nextIndex);
+        loadNextAyahs(reviewAyahs[nextIndex]);
+        setReviewStatus("question");
       } else {
-        dailyLog[ayahKey] = 1;
+        setReviewStatus("complete");
       }
+    } catch (error) {
+      console.error("Error updating spaced repetition data:", error);
+      // Continue anyway since localStorage fallback should work
+      setReviewedCount((prev) => prev + 1);
       
-      localStorage.setItem(dailyLogKey, JSON.stringify(dailyLog));
-    }
-
-    setReviewedCount((prev) => prev + 1);
-
-    if (currentAyahIndex < reviewAyahs.length - 1) {
-      const nextIndex = currentAyahIndex + 1;
-      setCurrentAyahIndex(nextIndex);
-      loadNextAyahs(reviewAyahs[nextIndex]);
-      setReviewStatus("question");
-    } else {
-      setReviewStatus("complete");
+      if (currentAyahIndex < reviewAyahs.length - 1) {
+        const nextIndex = currentAyahIndex + 1;
+        setCurrentAyahIndex(nextIndex);
+        loadNextAyahs(reviewAyahs[nextIndex]);
+        setReviewStatus("question");
+      } else {
+        setReviewStatus("complete");
+      }
     }
   };
 
