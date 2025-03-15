@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { ReviewHeatmap } from "@/components/review-heatmap";
 import { StatsCards } from "@/components/stats-cards";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface QuranStats {
   totalAyahs: number;
@@ -46,6 +48,8 @@ interface ReviewData {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [settings, setSettings] = useState<{
     selectedJuzaa: number[];
     selectedSurahs: number[];
@@ -68,36 +72,108 @@ export default function DashboardPage() {
   const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    let mounted = true;
+
+    const initializeDashboard = async () => {
+      // Don't do anything while session is loading
+      if (status === 'loading') {
+        setIsLoading(true);
+        return;
+      }
+
+      // If no session, redirect to login
+      if (!session?.user?.id) {
+        router.replace('/login');
+        return;
+      }
+
+      // Only load data if component is still mounted
+      if (mounted) {
+        try {
+          await loadDashboardData();
+        } catch (error) {
+          console.error("Failed to load dashboard:", error);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeDashboard();
+
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id, status]);
 
   const loadDashboardData = async () => {
     try {
+      setIsLoading(true);
+      
       // Fetch user settings from the database
-      const settingsResponse = await fetch("/api/settings");
+      const settingsResponse = await fetch("/api/settings", {
+        // Add cache control headers to prevent caching
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+
+      if (!settingsResponse.ok) {
+        if (settingsResponse.status === 401) {
+          router.replace('/login');
+          return;
+        }
+        throw new Error('Failed to fetch settings');
+      }
+      
       const settingsData = await settingsResponse.json();
+      
+      if (!settingsData.settings) {
+        setSettings(null);
+        setIsLoading(false);
+        return;
+      }
 
-      if (settingsData.settings) {
-        const userSettings = settingsData.settings;
-        setSettings(userSettings);
+      const userSettings = settingsData.settings;
+      setSettings(userSettings);
 
-        // Fetch stats for the selected juzaa or surahs
-        if (userSettings.selectionType === "juzaa") {
-          await fetchQuranStats(userSettings.selectedJuzaa);
-        } else {
-          await fetchQuranStatsBySurah(userSettings.selectedSurahs);
-        }
-
-        // Load all surahs info if selection type is "surah"
-        if (userSettings.selectionType === "surah") {
-          await loadAllSurahs();
-        }
-
-        // Calculate combined review statistics from all ayahs
-        await calculateAllReviewStats();
+      // Wrap all API calls in a single try-catch
+      try {
+        await Promise.all([
+          // Stats for selected juzaa or surahs
+          userSettings.selectionType === "juzaa" 
+            ? fetchQuranStats(userSettings.selectedJuzaa)
+            : fetchQuranStatsBySurah(userSettings.selectedSurahs),
+          
+          // Load surahs if needed
+          userSettings.selectionType === "surah" 
+            ? loadAllSurahs()
+            : Promise.resolve(),
+          
+          // Calculate review stats
+          calculateAllReviewStats()
+        ]);
+      } catch (error) {
+        console.error("Error loading stats:", error);
+        // Set safe default values but don't break the page
+        setQuranStats({
+          totalAyahs: 0,
+          selectedJuzAyahs: 0,
+          selectedSurahAyahs: 0,
+        });
+        setReviewStats({
+          dueToday: 0,
+          reviewedToday: 0,
+          streak: 0,
+          totalReviewed: 0,
+          dailyAverage: 0,
+        });
       }
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
+      console.error("Error in loadDashboardData:", error);
+      setSettings(null);
     } finally {
       setIsLoading(false);
     }
@@ -149,9 +225,66 @@ export default function DashboardPage() {
     }
   };
 
-  // Calculate review stats for all ayahs reviewed regardless of selection type
+  const fetchQuranStats = async (juzNumbers: number[]) => {
+    const [basicResponse, juzResponse] = await Promise.all([
+      fetch("/api/quran?action=load", {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }),
+      fetch(`/api/quran?action=juz&juz=${juzNumbers.join(",")}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      })
+    ]);
+
+    if (!basicResponse.ok || !juzResponse.ok) {
+      if (basicResponse.status === 401 || juzResponse.status === 401) {
+        router.replace('/login');
+        return;
+      }
+      throw new Error('Failed to fetch Quran stats');
+    }
+
+    const [basicData, juzData] = await Promise.all([
+      basicResponse.json(),
+      juzResponse.json()
+    ]);
+
+    if (basicData.success && juzData.success) {
+      setQuranStats({
+        totalAyahs: basicData.count || 0,
+        selectedJuzAyahs: juzData.ayahs?.length || 0,
+        selectedSurahAyahs: 0,
+      });
+    }
+  };
+
   const calculateAllReviewStats = async () => {
     try {
+      const [srResponse, logsResponse] = await Promise.all([
+        fetch("/api/spaced-repetition"),
+        fetch("/api/daily-logs")
+      ]);
+
+      if (!srResponse.ok || !logsResponse.ok) {
+        if (srResponse.status === 401 || logsResponse.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error('Failed to fetch review stats');
+      }
+
+      const [srData, logsData] = await Promise.all([
+        srResponse.json(),
+        logsResponse.json()
+      ]);
+
       // For tracking streaks and daily activity
       const reviewDays = new Set<string>();
       const dailyReviews: Record<string, number> = {};
@@ -163,10 +296,6 @@ export default function DashboardPage() {
       const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
       const startOfDay = new Date(now).setHours(0, 0, 0, 0);
       const endOfDay = new Date(now).setHours(23, 59, 59, 999);
-
-      // Fetch spaced repetition data
-      const srResponse = await fetch("/api/spaced-repetition");
-      const srData = await srResponse.json();
 
       if (srData.data) {
         // Count ayahs due today
@@ -182,10 +311,6 @@ export default function DashboardPage() {
           }
         });
       }
-
-      // Fetch daily logs
-      const logsResponse = await fetch("/api/daily-logs");
-      const logsData = await logsResponse.json();
 
       if (logsData.logs) {
         logsData.logs.forEach((log: any) => {
@@ -243,32 +368,14 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error("Error calculating review stats:", error);
-    }
-  };
-
-  const fetchQuranStats = async (juzNumbers: number[]) => {
-    try {
-      // First, get basic info about the Quran data
-      const basicResponse = await fetch("/api/quran?action=load");
-      const basicData = await basicResponse.json();
-
-      if (basicData.success) {
-        // Then get ayahs for the selected juzaa
-        const juzResponse = await fetch(
-          `/api/quran?action=juz&juz=${juzNumbers.join(",")}`
-        );
-        const juzData = await juzResponse.json();
-
-        if (juzData.success) {
-          setQuranStats({
-            totalAyahs: basicData.count || 0,
-            selectedJuzAyahs: juzData.ayahs?.length || 0,
-            selectedSurahAyahs: 0,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching Quran stats:", error);
+      // Set safe default values
+      setReviewStats({
+        dueToday: 0,
+        reviewedToday: 0,
+        streak: 0,
+        totalReviewed: 0,
+        dailyAverage: 0,
+      });
     }
   };
 
