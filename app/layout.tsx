@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { MainNav } from "@/components/main-nav";
 import { Providers } from './providers';
+import { Metadata } from "next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -11,58 +12,48 @@ const baseUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "https://quranki.vercel.app";
 
-export const metadata = {
-  title: "QuranKi - Spaced Repetition for Quran Memorization",
-  description:
-    "A spaced repetition system designed for Quran memorization and review",
-  metadataBase: new URL(baseUrl),
-  icons: {
-    icon: [
-      {
-        url: "/quranki-logo.png",
-        sizes: "32x32",
-        type: "image/png",
-      },
-      {
-        url: "/quranki-logo.png",
-        sizes: "16x16",
-        type: "image/png",
-      }
-    ],
-    apple: [
-      {
-        url: "/quranki-logo.png",
-        sizes: "180x180",
-        type: "image/png",
-      }
-    ],
-    shortcut: ["/quranki-logo.png"],
+export const metadata: Metadata = {
+  title: {
+    default: "Quranki",
+    template: "%s | Quranki",
   },
-  manifest: "/manifest.json",
+  description: "An intelligent spaced repetition system designed specifically for Quran review.",
+  keywords: [
+    "Quran",
+    "Review",
+    "Spaced Repetition",
+    "Islamic",
+    "Muslim",
+    "Learning",
+    "Education",
+  ],
+  authors: [
+    {
+      name: "Quranki",
+      url: "https://quranki.com",
+    },
+  ],
+  creator: "Quranki",
   openGraph: {
-    title: "QuranKi - Spaced Repetition for Quran Memorization",
-    description:
-      "Strengthen your Quran memorization with spaced repetition techniques",
-    url: baseUrl,
-    siteName: "QuranKi",
-    images: [
-      {
-        url: "/quranki-logo.png",
-        width: 1024,
-        height: 1024,
-        alt: "QuranKi Logo - Spaced Repetition for Quran Memorization",
-      },
-    ],
-    locale: "en_US",
     type: "website",
+    locale: "en_US",
+    url: "https://quranki.com",
+    title: "Quranki",
+    description: "An intelligent spaced repetition system designed specifically for Quran review.",
+    siteName: "Quranki",
   },
   twitter: {
     card: "summary_large_image",
-    title: "QuranKi - Spaced Repetition for Quran Memorization",
-    description:
-      "Strengthen your Quran memorization with spaced repetition techniques",
-    images: ["/quranki-logo.png"],
+    title: "Quranki",
+    description: "An intelligent spaced repetition system designed specifically for Quran review.",
+    creator: "@quranki",
   },
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon-16x16.png",
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

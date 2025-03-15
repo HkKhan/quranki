@@ -1,7 +1,7 @@
 {
-  "name": "QuranKi",
-  "short_name": "QuranKi",
-  "description": "Spaced Repetition for Quran Memorization",
+  "name": "Quranki",
+  "short_name": "Quranki",
+  "description": "An intelligent spaced repetition system designed specifically for Quran review.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

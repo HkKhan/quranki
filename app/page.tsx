@@ -1,28 +1,49 @@
+'use client';
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { BookOpen, BarChart2, Calendar } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
 export default function LandingPage() {
+  const scrollToHowItWorks = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const howItWorksSection = document.getElementById('how-it-works');
+    if (howItWorksSection) {
+      howItWorksSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <div>
-      <main>
-        <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48">
-          <div className="container px-4 md:px-6">
+      <main className="scroll-smooth">
+        <section className="relative w-full min-h-[100vh] flex items-center justify-center">
+          <div 
+            className="absolute inset-0 z-0 h-full w-full"
+            style={{
+              backgroundImage: "url('/quran_background.png')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }}
+          />
+          <div className="absolute inset-0 bg-black/50 z-0" />
+          <div className="container relative z-10 px-4 md:px-6 py-12 md:py-24">
             <div className="flex flex-col items-center space-y-4 text-center">
               <div className="space-y-2">
-                <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl">
-                  Memorize and Review the Quran with Ease
+                <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl text-white">
+                  Review the Quran with Ease
                 </h1>
-                <p className="mx-auto max-w-[700px] text-gray-500 md:text-xl dark:text-gray-400">
-                  An intelligent spaced repetition system designed specifically for Quran memorization and review
+                <p className="mx-auto max-w-[700px] text-gray-200 md:text-xl">
+                  An intelligent spaced repetition system designed specifically for Quran review
                 </p>
               </div>
               <div className="space-x-4">
                 <Link href="/setup">
-                  <Button size="lg">Get Started</Button>
+                  <Button size="lg" className="bg-primary hover:bg-primary/90">Get Started</Button>
                 </Link>
-                <a href="#how-it-works">
-                  <Button variant="outline" size="lg">
+                <a href="#how-it-works" onClick={scrollToHowItWorks}>
+                  <Button variant="outline" size="lg" className="bg-white/10 backdrop-blur-sm border-white/20 text-white hover:bg-white/20">
                     Learn More
                   </Button>
                 </a>
@@ -44,7 +65,7 @@ export default function LandingPage() {
                 <Calendar className="h-12 w-12 text-primary" />
                 <h3 className="text-xl font-bold">Spaced Repetition</h3>
                 <p className="text-center text-gray-500 dark:text-gray-400">
-                  Review ayahs at optimal intervals to strengthen your memorization over time
+                  Review ayahs at optimal intervals to strengthen your knowledge over time
                 </p>
               </div>
               <div className="flex flex-col items-center space-y-2 border rounded-lg p-6 bg-background">
@@ -65,24 +86,34 @@ export default function LandingPage() {
                 <p className="text-gray-500 dark:text-gray-400">
                   Our app uses a proven spaced repetition algorithm to help you efficiently review the Quran:
                 </p>
-                <ul className="space-y-2">
-                  <li className="flex items-start gap-2">
-                    <div className="rounded-full bg-primary/10 p-1 text-primary">1</div>
-                    <div>Set up your knowledge level by selecting which juzaa you've memorized</div>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="rounded-full bg-primary/10 p-1 text-primary">2</div>
-                    <div>Configure how many "ayahs after" you want to recall when shown a prompt</div>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="rounded-full bg-primary/10 p-1 text-primary">3</div>
-                    <div>
-                      Review daily with our intelligent scheduling system that prioritizes what you need to review
+                <ul className="space-y-4">
+                  <li className="flex items-start gap-4">
+                    <Badge variant="outline" className="h-8 w-8 rounded-full p-2 flex items-center justify-center text-primary border-primary">1</Badge>
+                    <div className="space-y-1">
+                      <div className="text-base font-medium">Set Your Knowledge Level</div>
+                      <div className="text-sm text-muted-foreground">Select which juzaa you've learned</div>
                     </div>
                   </li>
-                  <li className="flex items-start gap-2">
-                    <div className="rounded-full bg-primary/10 p-1 text-primary">4</div>
-                    <div>Track your progress with detailed statistics and visualizations</div>
+                  <li className="flex items-start gap-4">
+                    <Badge variant="outline" className="h-8 w-8 rounded-full p-2 flex items-center justify-center text-primary border-primary">2</Badge>
+                    <div className="space-y-1">
+                      <div className="text-base font-medium">Configure Review Length</div>
+                      <div className="text-sm text-muted-foreground">Choose how many ayahs to recall when shown a prompt</div>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-4">
+                    <Badge variant="outline" className="h-8 w-8 rounded-full p-2 flex items-center justify-center text-primary border-primary">3</Badge>
+                    <div className="space-y-1">
+                      <div className="text-base font-medium">Daily Review</div>
+                      <div className="text-sm text-muted-foreground">Review with our intelligent scheduling system that prioritizes what you need to practice</div>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-4">
+                    <Badge variant="outline" className="h-8 w-8 rounded-full p-2 flex items-center justify-center text-primary border-primary">4</Badge>
+                    <div className="space-y-1">
+                      <div className="text-base font-medium">Track Progress</div>
+                      <div className="text-sm text-muted-foreground">Monitor your journey with detailed statistics and visualizations</div>
+                    </div>
                   </li>
                 </ul>
               </div>
