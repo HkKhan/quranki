@@ -169,8 +169,6 @@ export default function DashboardPage() {
       const srData = await srResponse.json();
 
       if (srData.data) {
-        totalReviewed = srData.data.length;
-        
         // Count ayahs due today
         dueToday = srData.data.filter((item: ReviewData) => {
           return item.dueDate >= startOfDay && item.dueDate <= endOfDay;
@@ -198,6 +196,7 @@ export default function DashboardPage() {
             dailyReviews[date] = 0;
           }
           dailyReviews[date] += log.count;
+          totalReviewed += log.count; // Add to total reviews
         });
       }
       
