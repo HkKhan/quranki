@@ -49,9 +49,9 @@ export const metadata: Metadata = {
     creator: "@quranki",
   },
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon-16x16.png",
-    apple: "/apple-touch-icon.png",
+    icon: "/quranmeta.ico",
+    shortcut: "/quranmeta.ico",
+    apple: "/quranmeta.ico",
   },
   manifest: "/manifest.json",
 };
@@ -64,9 +64,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/quranki-logo.png" />
-        <link rel="apple-touch-icon" href="/quranki-logo.png" />
-        <link rel="shortcut icon" href="/quranki-logo.png" />
+        <link rel="icon" href="/quranmeta.ico" />
+        <link rel="apple-touch-icon" href="/quranmeta.ico" />
+        <link rel="shortcut icon" href="/quranmeta.ico" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
