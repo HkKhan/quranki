@@ -16,6 +16,29 @@ export const metadata = {
   description:
     "A spaced repetition system designed for Quran memorization and review",
   metadataBase: new URL(baseUrl),
+  icons: {
+    icon: [
+      {
+        url: "/quranki-logo.png",
+        sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        url: "/quranki-logo.png",
+        sizes: "16x16",
+        type: "image/png",
+      }
+    ],
+    apple: [
+      {
+        url: "/quranki-logo.png",
+        sizes: "180x180",
+        type: "image/png",
+      }
+    ],
+    shortcut: ["/quranki-logo.png"],
+  },
+  manifest: "/manifest.json",
   openGraph: {
     title: "QuranKi - Spaced Repetition for Quran Memorization",
     description:
@@ -24,7 +47,7 @@ export const metadata = {
     siteName: "QuranKi",
     images: [
       {
-        url: "/quranki_logo.png",
+        url: "/quranki-logo.png",
         width: 1024,
         height: 1024,
         alt: "QuranKi Logo - Spaced Repetition for Quran Memorization",
@@ -38,7 +61,7 @@ export const metadata = {
     title: "QuranKi - Spaced Repetition for Quran Memorization",
     description:
       "Strengthen your Quran memorization with spaced repetition techniques",
-    images: ["/quranki_logo.png"],
+    images: ["/quranki-logo.png"],
   },
 };
 
@@ -50,6 +73,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/quranki-logo.png" />
+        <link rel="apple-touch-icon" href="/quranki-logo.png" />
+        <link rel="shortcut icon" href="/quranki-logo.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"

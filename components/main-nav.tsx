@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import Image from "next/image";
 
 export function MainNav() {
   const pathname = usePathname();
@@ -55,9 +56,27 @@ export function MainNav() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
         <div className="flex items-center mr-4">
-          <Link href="/" className="flex items-center space-x-2">
-            <BookOpen className="h-6 w-6" />
-            <span className="font-bold">QuranKi</span>
+          <Link href="/" className="flex items-center">
+            <div className={cn(
+              "relative p-1 transition-all duration-300 rounded-lg",
+              theme === "dark" 
+                ? "hover:bg-gold-900/10 hover:shadow-[0_0_15px_rgba(255,215,0,0.3)]" 
+                : "hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)]"
+            )}>
+              <Image
+                src={theme === "dark" ? "/qurankilogo.png" : "/qurankilight.png"}
+                alt="QuranKi Logo"
+                width={120}
+                height={36}
+                className={cn(
+                  "h-9 w-[120px] transition-all duration-300 rounded-lg",
+                  theme === "dark" 
+                    ? "shadow-[0_0_10px_rgba(255,215,0,0.2)]" 
+                    : "shadow-[0_0_10px_rgba(255,255,255,0.3)]"
+                )}
+                priority
+              />
+            </div>
           </Link>
         </div>
         <div className="flex-1"></div>
