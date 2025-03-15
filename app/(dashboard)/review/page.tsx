@@ -187,15 +187,24 @@ export default function ReviewPage() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     try {
-      // First, load previous ayahs as context (always 2)
-      const prevResponse = await fetch(
-        `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`
-      );
-      const prevData = await prevResponse.json();
-      
-      if (prevData.success && prevData.ayahs) {
-        setPrevAyahs(prevData.ayahs);
+      // Only fetch previous ayahs if we're not at the start of a surah
+      if (currentAyah.ayah_no_surah > 1) {
+        const prevResponse = await fetch(
+          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`
+        );
+        const prevData = await prevResponse.json();
+        
+        if (prevData.success && prevData.ayahs) {
+          // Only include previous ayahs from the same surah
+          const sameSurahPrevAyahs = prevData.ayahs.filter((ayah: QuranAyah) => 
+            ayah.surah_no === currentAyah.surah_no
+          );
+          setPrevAyahs(sameSurahPrevAyahs);
+        } else {
+          setPrevAyahs([]);
+        }
       } else {
+        // At the start of a surah, don't show any previous context
         setPrevAyahs([]);
       }
       
@@ -229,22 +238,16 @@ export default function ReviewPage() {
         const data = await response.json();
 
         if (data.success && data.ayahs) {
-          setNextAyahs(data.ayahs);
+          // Only include next ayahs from the same surah
+          const sameSurahNextAyahs = data.ayahs.filter((ayah: QuranAyah) => 
+            ayah.surah_no === currentAyah.surah_no
+          );
+          setNextAyahs(sameSurahNextAyahs);
         } else {
           setNextAyahs([]);
         }
       } else {
-        // If we couldn't get the surah count, fall back to the original behavior
-        const response = await fetch(
-          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${settings.ayahsAfter}`
-        );
-        const data = await response.json();
-
-        if (data.success && data.ayahs) {
-          setNextAyahs(data.ayahs);
-        } else {
-          setNextAyahs([]);
-        }
+        setNextAyahs([]);
       }
     } catch (error) {
       console.error("Error loading ayahs:", error);
