@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -48,6 +49,7 @@ type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 
 export default function ReviewPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [ayahs, setAyahs] = useState<any[]>([]);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
@@ -58,35 +60,54 @@ export default function ReviewPage() {
   const [reviewedCount, setReviewedCount] = useState(0);
   const [nextAyahs, setNextAyahs] = useState<QuranAyah[]>([]);
   const [prevAyahs, setPrevAyahs] = useState<QuranAyah[]>([]);
-  const [settings, setSettings] = useState(() => {
-    // Initialize settings from localStorage or use defaults
-    if (typeof window === "undefined") {
-      return {
-        selectedJuzaa: [30],
-        selectedSurahs: [],
-        selectionType: "juzaa",
-        ayahsAfter: 2,
-        promptsPerSession: 20,
-      };
-    }
-
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      return JSON.parse(savedSettings);
-    }
-    return {
-      selectedJuzaa: [30],
-      selectedSurahs: [],
-      selectionType: "juzaa",
-      ayahsAfter: 2,
-      promptsPerSession: 20,
-    };
+  const [settings, setSettings] = useState({
+    selectedJuzaa: [30],
+    selectedSurahs: [],
+    selectionType: "juzaa" as "juzaa" | "surah",
+    ayahsAfter: 2,
+    promptsPerSession: 20,
   });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAyahs();
-  }, []);
+    if (!session?.user?.id) {
+      router.push('/login');
+      return;
+    }
+
+    // Load settings from database
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        const data = await response.json();
+
+        if (data.settings) {
+          const userSettings = {
+            selectedJuzaa: data.settings.selectedJuzaa || [30],
+            selectedSurahs: data.settings.selectedSurahs || [],
+            selectionType: data.settings.selectionType || "juzaa",
+            ayahsAfter: data.settings.ayahsAfter || 2,
+            promptsPerSession: data.settings.promptsPerSession || 20,
+          };
+          setSettings(userSettings);
+          // Instead of calling loadAyahs here, the second useEffect will handle it
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        setError('Failed to load settings');
+        setReviewStatus("error");
+      }
+    };
+
+    loadSettings();
+  }, [session, router]);
+
+  // New useEffect to handle loading ayahs when settings change
+  useEffect(() => {
+    if (session?.user?.id && settings) {
+      loadAyahs();
+    }
+  }, [settings, session?.user?.id]);
 
   const loadAyahs = async () => {
     setIsLoading(true);
@@ -98,11 +119,13 @@ export default function ReviewPage() {
       
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
+        console.log("Loading ayahs for juzaa:", juzParam); // Debug log
         response = await fetch(
           `/api/quran?action=review&juz=${juzParam}&count=${count}`
         );
       } else {
         const surahParam = settings.selectedSurahs.join(",");
+        console.log("Loading ayahs for surahs:", surahParam); // Debug log
         response = await fetch(
           `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`
         );
@@ -118,28 +141,30 @@ export default function ReviewPage() {
         return;
       }
 
-      // Load spaced repetition data for each ayah
-      const ayahsWithSR = data.ayahs.map((ayah: QuranAyah) => {
-        // Skip localStorage access during server-side rendering
-        if (typeof window === "undefined") {
+      // Load spaced repetition data for each ayah from the database
+      const ayahPromises = data.ayahs.map(async (ayah: QuranAyah) => {
+        try {
+          const srResponse = await fetch(`/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`);
+          const srData = await srResponse.json();
+          
+          if (srData.data) {
+            return {
+              ...ayah,
+              interval: srData.data.interval,
+              repetitions: srData.data.repetitions,
+              easeFactor: srData.data.easeFactor,
+              lastReviewed: srData.data.lastReviewed,
+              dueDate: srData.data.dueDate,
+            };
+          }
+          return ayah;
+        } catch (error) {
+          console.error("Error loading spaced repetition data:", error);
           return ayah;
         }
-
-        const storageKey = `quranki_sr_${ayah.surah_no}_${ayah.ayah_no_surah}`;
-        const srData = localStorage.getItem(storageKey);
-        if (srData) {
-          const parsed = JSON.parse(srData);
-          return {
-            ...ayah,
-            interval: parsed.interval,
-            repetitions: parsed.repetitions,
-            easeFactor: parsed.easeFactor,
-            lastReviewed: parsed.lastReviewed,
-            dueDate: parsed.dueDate,
-          };
-        }
-        return ayah;
       });
+
+      const ayahsWithSR = await Promise.all(ayahPromises);
 
       setAyahs(ayahsWithSR);
       setReviewAyahs(ayahsWithSR);
@@ -148,7 +173,9 @@ export default function ReviewPage() {
       setReviewStatus("question");
 
       // Load the first set of next ayahs
-      loadNextAyahs(ayahsWithSR[0]);
+      if (ayahsWithSR.length > 0) {
+        loadNextAyahs(ayahsWithSR[0]);
+      }
     } catch (error) {
       console.error("Error loading ayahs:", error);
       setError("Failed to load Quran data. Please try again later.");
@@ -230,7 +257,7 @@ export default function ReviewPage() {
     setReviewStatus("answer");
   };
 
-  const handleRating = (remembered: boolean) => {
+  const handleRating = async (remembered: boolean) => {
     const currentAyah = reviewAyahs[currentAyahIndex];
 
     // Initialize spaced repetition values if they don't exist
@@ -248,28 +275,22 @@ export default function ReviewPage() {
 
     if (quality < 2) {
       // Failed to remember (1)
+      nextInterval = 1;
       nextRepetitions = 0;
-      nextInterval = 1; // Reset to 1 day
+      nextEaseFactor = Math.max(1.3, currentAyah.easeFactor - 0.2);
     } else {
-      // Remembered (3)
-      nextRepetitions += 1;
+      // Successfully remembered (3)
+      nextRepetitions = currentAyah.repetitions + 1;
 
-      // Calculate next interval
       if (nextRepetitions === 1) {
         nextInterval = 1;
       } else if (nextRepetitions === 2) {
         nextInterval = 6;
       } else {
-        nextInterval = Math.round(
-          currentAyah.interval * currentAyah.easeFactor
-        );
+        nextInterval = Math.round(currentAyah.interval * currentAyah.easeFactor);
       }
 
-      // Update ease factor
-      nextEaseFactor =
-        currentAyah.easeFactor +
-        (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
-      nextEaseFactor = Math.max(1.3, nextEaseFactor); // Minimum ease factor is 1.3
+      nextEaseFactor = currentAyah.easeFactor + (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
     }
 
     // Update the ayah with new spaced repetition values
@@ -282,59 +303,61 @@ export default function ReviewPage() {
       dueDate: Date.now() + nextInterval * 24 * 60 * 60 * 1000, // Convert days to milliseconds
     };
 
-    // Update the ayah in the review list
-    const updatedReviewAyahs = [...reviewAyahs];
-    updatedReviewAyahs[currentAyahIndex] = updatedAyah;
-    setReviewAyahs(updatedReviewAyahs);
-
-    // Store the updated spaced repetition data in localStorage
-    // Skip localStorage access during server-side rendering
-    if (typeof window !== "undefined") {
-      const storageKey = `quranki_sr_${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
-
-      // Also save review date to a daily log for better statistics tracking
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-      const dailyLogKey = `quranki_daily_log_${today}`;
-      
-      // Save SR data for this specific ayah
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({
+    // Save to database
+    try {
+      const response = await fetch("/api/spaced-repetition", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          surahNo: updatedAyah.surah_no,
+          ayahNoSurah: updatedAyah.ayah_no_surah,
           interval: updatedAyah.interval,
           repetitions: updatedAyah.repetitions,
           easeFactor: updatedAyah.easeFactor,
           lastReviewed: updatedAyah.lastReviewed,
           dueDate: updatedAyah.dueDate,
-          selectionType: settings.selectionType, // Track which selection type was used
-          reviewDate: today,
-        })
-      );
-      
-      // Update daily log
-      let dailyLog: Record<string, number> = {};
-      const existingLog = localStorage.getItem(dailyLogKey);
-      if (existingLog) {
-        dailyLog = JSON.parse(existingLog);
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to save spaced repetition data");
       }
-      
-      // Add or increment ayah count
-      const ayahKey = `${currentAyah.surah_no}_${currentAyah.ayah_no_surah}`;
-      if (dailyLog[ayahKey]) {
-        dailyLog[ayahKey]++;
-      } else {
-        dailyLog[ayahKey] = 1;
-      }
-      
-      localStorage.setItem(dailyLogKey, JSON.stringify(dailyLog));
+    } catch (error) {
+      console.error("Error saving spaced repetition data:", error);
     }
 
-    setReviewedCount((prev) => prev + 1);
+    // Save daily log
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      await fetch("/api/daily-logs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          date: today,
+          ayahKey: `${updatedAyah.surah_no}:${updatedAyah.ayah_no_surah}`,
+        }),
+      });
+    } catch (error) {
+      console.error("Error saving daily log:", error);
+    }
 
+    // Update the review ayahs array with the updated ayah
+    const updatedReviewAyahs = [...reviewAyahs];
+    updatedReviewAyahs[currentAyahIndex] = updatedAyah;
+    setReviewAyahs(updatedReviewAyahs);
+
+    // Move to the next ayah or complete the review
     if (currentAyahIndex < reviewAyahs.length - 1) {
-      const nextIndex = currentAyahIndex + 1;
-      setCurrentAyahIndex(nextIndex);
-      loadNextAyahs(reviewAyahs[nextIndex]);
+      setCurrentAyahIndex(currentAyahIndex + 1);
+      setReviewedCount(reviewedCount + 1);
+      setShowTranslation(false);
+      setShowArabic(false);
       setReviewStatus("question");
+      loadNextAyahs(reviewAyahs[currentAyahIndex + 1]);
     } else {
       setReviewStatus("complete");
     }

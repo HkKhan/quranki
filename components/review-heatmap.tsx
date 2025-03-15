@@ -29,6 +29,7 @@ export function ReviewHeatmap() {
     totalReviews: 0,
     daysWithReviews: 0,
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   const goToPreviousYear = () => {
     setCurrentYear(currentYear - 1);
@@ -39,15 +40,114 @@ export function ReviewHeatmap() {
   };
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    const fetchData = async () => {
+      if (!canvasRef.current) return;
 
-    // Skip localStorage access during server-side rendering
-    if (typeof window === "undefined") return;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+      setIsLoading(true);
 
+      try {
+        // Calculate start and end dates for the current year
+        const startDate = new Date(currentYear, 0, 1); // January 1st of current year
+        const endDate = new Date(currentYear + 1, 0, 0); // December 31st of current year
+        const days = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
+
+        const data: DayData[] = [];
+        const dueData: { [key: string]: number } = {};
+        const today = new Date();
+
+        // Initialize data array with zeros
+        for (let i = 0; i < days; i++) {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() + i);
+          data.push({ date, count: 0, isDue: false });
+        }
+
+        // Fetch daily logs
+        const dailyLogsResponse = await fetch("/api/daily-logs");
+        const dailyLogsData = await dailyLogsResponse.json();
+        
+        let totalReviews = 0;
+        let daysWithReviews = 0;
+        let yearReviews = 0;
+
+        if (dailyLogsData.logs) {
+          dailyLogsData.logs.forEach((log: any) => {
+            const reviewDate = new Date(log.date);
+            
+            // Only count if in current year view
+            if (reviewDate.getFullYear() === currentYear) {
+              const dayOfYear = Math.floor(
+                (reviewDate.getTime() - startDate.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
+
+              if (dayOfYear >= 0 && dayOfYear < days) {
+                if (data[dayOfYear].count === 0) {
+                  daysWithReviews++;
+                }
+                data[dayOfYear].count += log.count;
+                yearReviews += log.count;
+              }
+            }
+            totalReviews += log.count;
+          });
+        }
+
+        // Fetch spaced repetition data for due dates
+        const srResponse = await fetch("/api/spaced-repetition");
+        const srData = await srResponse.json();
+
+        if (srData.data) {
+          srData.data.forEach((item: ReviewData) => {
+            if (item.dueDate) {
+              const dueDate = new Date(item.dueDate);
+              if (dueDate.getFullYear() === currentYear) {
+                const dueDateStr = dueDate.toDateString();
+                dueData[dueDateStr] = (dueData[dueDateStr] || 0) + 1;
+              }
+            }
+          });
+        }
+
+        // Calculate and set stats
+        const dailyAverage = daysWithReviews > 0 ? yearReviews / daysWithReviews : 0;
+        setStats({
+          dailyAverage,
+          totalReviews: yearReviews,
+          daysWithReviews,
+        });
+
+        // Add due counts to data
+        data.forEach((day) => {
+          const dueCount = dueData[day.date.toDateString()] || 0;
+          if (dueCount > 0 && day.date >= today) {
+            day.isDue = true;
+            day.count = dueCount;
+          }
+        });
+
+        // Draw the heatmap
+        drawHeatmap(ctx, canvas, data, today);
+      } catch (error) {
+        console.error("Error fetching review data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [currentYear]);
+
+  const drawHeatmap = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    data: DayData[],
+    today: Date
+  ) => {
     // Set canvas dimensions using standard HTML dimensions without pixel ratio adjustments
     const canvasWidth = canvas.clientWidth;
     const canvasHeight = 180;
@@ -59,86 +159,6 @@ export function ReviewHeatmap() {
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Calculate start and end dates for the current year
-    const startDate = new Date(currentYear, 0, 1); // January 1st of current year
-    const endDate = new Date(currentYear + 1, 0, 0); // December 31st of current year
-    const days =
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
-
-    const data: DayData[] = [];
-    const dueData: { [key: string]: number } = {};
-    const today = new Date();
-
-    // Initialize data array with zeros
-    for (let i = 0; i < days; i++) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + i);
-      data.push({ date, count: 0, isDue: false });
-    }
-
-    // Collect all review data
-    const allKeys = Object.keys(localStorage);
-    const reviewKeys = allKeys.filter((key) => key.startsWith("quranki_sr_"));
-    let totalReviews = 0;
-    let daysWithReviews = 0;
-    let yearReviews = 0;
-
-    reviewKeys.forEach((key) => {
-      const srDataStr = localStorage.getItem(key);
-      if (srDataStr) {
-        const srData: ReviewData = JSON.parse(srDataStr);
-
-        // Count past reviews
-        if (srData.lastReviewed) {
-          const reviewDate = new Date(srData.lastReviewed);
-
-          // Only count if in current year view
-          if (reviewDate.getFullYear() === currentYear) {
-            const dayOfYear = Math.floor(
-              (reviewDate.getTime() - startDate.getTime()) /
-                (1000 * 60 * 60 * 24)
-            );
-
-            if (dayOfYear >= 0 && dayOfYear < days) {
-              if (data[dayOfYear].count === 0) {
-                daysWithReviews++;
-              }
-              data[dayOfYear].count++;
-              yearReviews++;
-            }
-          }
-          totalReviews++;
-        }
-
-        // Count future due dates
-        if (srData.dueDate) {
-          const dueDate = new Date(srData.dueDate);
-          if (dueDate.getFullYear() === currentYear) {
-            const dueDateStr = dueDate.toDateString();
-            dueData[dueDateStr] = (dueData[dueDateStr] || 0) + 1;
-          }
-        }
-      }
-    });
-
-    // Calculate and set stats
-    const dailyAverage =
-      daysWithReviews > 0 ? yearReviews / daysWithReviews : 0;
-    setStats({
-      dailyAverage,
-      totalReviews: yearReviews,
-      daysWithReviews,
-    });
-
-    // Add due counts to data
-    data.forEach((day) => {
-      const dueCount = dueData[day.date.toDateString()] || 0;
-      if (dueCount > 0 && day.date >= today) {
-        day.isDue = true;
-        day.count = dueCount;
-      }
-    });
 
     // Calculate color intensities
     const maxCount = Math.max(...data.map((d) => d.count), 1); // Ensure non-zero max
@@ -172,13 +192,12 @@ export function ReviewHeatmap() {
 
     // Calculate grid dimensions
     const ROWS = 7;
-    const COLS = Math.ceil(days / ROWS);
+    const COLS = Math.ceil(data.length / ROWS);
     const gridWidth = COLS * TOTAL_CELL_SIZE;
     const gridHeight = ROWS * TOTAL_CELL_SIZE;
 
     // Calculate starting position to center the grid
-    const startX =
-      CANVAS_PADDING + (canvasWidth - 2 * CANVAS_PADDING - gridWidth) / 2;
+    const startX = CANVAS_PADDING + (canvasWidth - 2 * CANVAS_PADDING - gridWidth) / 2;
     const startY = CANVAS_PADDING;
 
     // Store cell positions for hover detection
@@ -239,42 +258,21 @@ export function ReviewHeatmap() {
       }
     });
 
-    // Draw legend at the bottom with proper spacing
+    // Draw legend
     const legendY = startY + gridHeight + 24;
     ctx.font = "12px system-ui";
-
-    // Use class-based colors that respect dark mode
-    // We'll need to detect the current theme by checking a data attribute
     const isDarkMode = document.documentElement.classList.contains("dark");
-    ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280"; // Light gray in dark mode, darker gray in light mode
-
-    // Past reviews legend
-    ctx.fillText("Past Reviews:", startX, legendY);
-    pastColors.slice(1).forEach((color, i) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(startX + 100 + i * 30, legendY - 12, 24, 10);
-    });
-
-    // Future due legend
     ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
-    ctx.fillText("Due:", startX + canvasWidth / 2 - CANVAS_PADDING, legendY);
-    dueColors.slice(1).forEach((color, i) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(
-        startX + canvasWidth / 2 - CANVAS_PADDING + 40 + i * 30,
-        legendY - 12,
-        24,
-        10
-      );
-    });
 
-    // Add hover effect handler
+    // Add mouse event handlers
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      // Find hovered cell
+      setMousePos({ x: e.clientX, y: e.clientY });
+
+      // Check if mouse is over any cell
       const hoveredCell = cellPositions.find(
         (cell) =>
           x >= cell.x &&
@@ -283,80 +281,69 @@ export function ReviewHeatmap() {
           y <= cell.y + cell.height
       );
 
-      if (hoveredCell) {
-        setHoveredDay(hoveredCell.data);
-        setMousePos({
-          x: hoveredCell.x + hoveredCell.width / 2, // Center horizontally
-          y: hoveredCell.y + hoveredCell.height + 5, // Just below the cell
-        });
-      } else {
-        setHoveredDay(null);
-      }
+      setHoveredDay(hoveredCell ? hoveredCell.data : null);
+    };
+
+    const handleMouseLeave = () => {
+      setHoveredDay(null);
     };
 
     canvas.addEventListener("mousemove", handleMouseMove);
-    return () => canvas.removeEventListener("mousemove", handleMouseMove);
-  }, [currentYear]);
+    canvas.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  };
 
   return (
-    <Card className="w-full">
+    <Card>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between mb-4">
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
             onClick={goToPreviousYear}
-            className="h-8 w-8 p-0"
+            disabled={isLoading}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="font-medium">{currentYear} Review Activity</div>
+          <div className="text-sm font-medium">{currentYear}</div>
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
             onClick={goToNextYear}
-            className="h-8 w-8 p-0"
-            disabled={currentYear >= new Date().getFullYear() + 1}
+            disabled={isLoading || currentYear >= new Date().getFullYear()}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="relative w-full">
+        <div className="relative">
           <canvas
             ref={canvasRef}
-            className="w-full cursor-pointer"
-            style={{ display: "block" }}
+            style={{ width: "100%", height: "180px" }}
           />
           {hoveredDay && (
             <div
-              className="absolute z-10 bg-popover text-popover-foreground px-3 py-2 rounded-md shadow-md text-sm"
+              className="absolute z-10 bg-popover text-popover-foreground px-2 py-1 rounded text-sm"
               style={{
-                left: `${mousePos.x}px`,
-                top: `${mousePos.y}px`,
-                transform: "translate(-50%, 0)", // Center horizontally
+                left: mousePos.x + 10,
+                top: mousePos.y - 40,
+                transform: "translateX(-50%)",
               }}
             >
-              <div className="font-medium">
-                {hoveredDay.date.toLocaleDateString(undefined, {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </div>
-              <div>
-                {hoveredDay.isDue
-                  ? `${hoveredDay.count} ayah${
-                      hoveredDay.count === 1 ? "" : "s"
-                    } due`
-                  : hoveredDay.count === 0
-                  ? "No ayahs reviewed"
-                  : `${hoveredDay.count} ayah${
-                      hoveredDay.count === 1 ? "" : "s"
-                    } reviewed`}
-              </div>
+              {hoveredDay.date.toLocaleDateString()} -{" "}
+              {hoveredDay.isDue
+                ? `${hoveredDay.count} due`
+                : `${hoveredDay.count} reviews`}
             </div>
           )}
+        </div>
+        <div className="mt-4 text-sm text-muted-foreground">
+          <div>Daily Average: {stats.dailyAverage.toFixed(1)}</div>
+          <div>Total Reviews: {stats.totalReviews}</div>
+          <div>Days with Reviews: {stats.daysWithReviews}</div>
         </div>
       </CardContent>
     </Card>

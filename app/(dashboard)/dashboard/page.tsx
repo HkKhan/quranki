@@ -72,35 +72,35 @@ export default function DashboardPage() {
   }, []);
 
   const loadDashboardData = async () => {
-    // Skip localStorage access during server-side rendering
-    if (typeof window === "undefined") {
+    try {
+      // Fetch user settings from the database
+      const settingsResponse = await fetch("/api/settings");
+      const settingsData = await settingsResponse.json();
+
+      if (settingsData.settings) {
+        const userSettings = settingsData.settings;
+        setSettings(userSettings);
+
+        // Fetch stats for the selected juzaa or surahs
+        if (userSettings.selectionType === "juzaa") {
+          await fetchQuranStats(userSettings.selectedJuzaa);
+        } else {
+          await fetchQuranStatsBySurah(userSettings.selectedSurahs);
+        }
+
+        // Load all surahs info if selection type is "surah"
+        if (userSettings.selectionType === "surah") {
+          await loadAllSurahs();
+        }
+
+        // Calculate combined review statistics from all ayahs
+        await calculateAllReviewStats();
+      }
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      const parsedSettings = JSON.parse(savedSettings);
-      setSettings(parsedSettings);
-
-      // Fetch stats for the selected juzaa or surahs
-      if (parsedSettings.selectionType === "juzaa") {
-        await fetchQuranStats(parsedSettings.selectedJuzaa);
-      } else {
-        await fetchQuranStatsBySurah(parsedSettings.selectedSurahs);
-      }
-
-      // Load all surahs info if selection type is "surah"
-      if (parsedSettings.selectionType === "surah") {
-        await loadAllSurahs();
-      }
-
-      // Calculate combined review statistics from all ayahs (both juzaa and surah)
-      calculateAllReviewStats();
-    }
-
-    setIsLoading(false);
   };
 
   const loadAllSurahs = async () => {
@@ -152,11 +152,6 @@ export default function DashboardPage() {
   // Calculate review stats for all ayahs reviewed regardless of selection type
   const calculateAllReviewStats = async () => {
     try {
-      // Skip localStorage access during server-side rendering
-      if (typeof window === "undefined") {
-        return;
-      }
-
       // For tracking streaks and daily activity
       const reviewDays = new Set<string>();
       const dailyReviews: Record<string, number> = {};
@@ -168,53 +163,42 @@ export default function DashboardPage() {
       const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
       const startOfDay = new Date(now).setHours(0, 0, 0, 0);
       const endOfDay = new Date(now).setHours(23, 59, 59, 999);
-      
-      // Get all keys in localStorage for SR data and daily logs
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
+
+      // Fetch spaced repetition data
+      const srResponse = await fetch("/api/spaced-repetition");
+      const srData = await srResponse.json();
+
+      if (srData.data) {
+        totalReviewed = srData.data.length;
         
-        // Process SR data for individual ayahs
-        if (key.startsWith("quranki_sr_")) {
-          const srDataStr = localStorage.getItem(key);
-          if (srDataStr) {
-            const srData = JSON.parse(srDataStr);
-            totalReviewed++;
-            
-            // Check if due today
-            if (srData.dueDate >= startOfDay && srData.dueDate <= endOfDay) {
-              dueToday++;
-            }
-            
-            // Record the review date for streak calculation
-            if (srData.reviewDate) {
-              reviewDays.add(srData.reviewDate);
-            }
-            else if (srData.lastReviewed) {
-              // For backward compatibility with older data
-              const reviewDate = new Date(srData.lastReviewed).toISOString().split('T')[0];
-              reviewDays.add(reviewDate);
-            }
+        // Count ayahs due today
+        dueToday = srData.data.filter((item: ReviewData) => {
+          return item.dueDate >= startOfDay && item.dueDate <= endOfDay;
+        }).length;
+
+        // Record review dates for streak calculation
+        srData.data.forEach((item: ReviewData) => {
+          if (item.lastReviewed) {
+            const reviewDate = new Date(item.lastReviewed).toISOString().split('T')[0];
+            reviewDays.add(reviewDate);
           }
-        }
-        
-        // Process daily logs for activity calculation
-        else if (key.startsWith("quranki_daily_log_")) {
-          const date = key.replace("quranki_daily_log_", "");
+        });
+      }
+
+      // Fetch daily logs
+      const logsResponse = await fetch("/api/daily-logs");
+      const logsData = await logsResponse.json();
+
+      if (logsData.logs) {
+        logsData.logs.forEach((log: any) => {
+          const date = log.date;
           reviewDays.add(date);
           
-          const logData = localStorage.getItem(key);
-          if (logData) {
-            const log = JSON.parse(logData);
-            const ayahsReviewedThisDay = Object.keys(log).length;
-            dailyReviews[date] = ayahsReviewedThisDay;
-            
-            // Count today's reviews
-            if (date === today) {
-              dailyReviews[today] = Object.keys(log).length;
-            }
+          if (!dailyReviews[date]) {
+            dailyReviews[date] = 0;
           }
-        }
+          dailyReviews[date] += log.count;
+        });
       }
       
       // Calculate streak (consecutive days of review)
@@ -249,16 +233,14 @@ export default function DashboardPage() {
       const dailyAverage = daysWithActivity > 0 
         ? totalDailyReviews / daysWithActivity 
         : 0;
-        
-      // Calculate today's reviews
-      const reviewedToday = dailyReviews[today] || 0;
-      
+
+      // Update review stats
       setReviewStats({
         dueToday,
-        reviewedToday,
+        reviewedToday: dailyReviews[today] || 0,
         streak,
         totalReviewed,
-        dailyAverage: Math.round(dailyAverage * 10) / 10, // Round to 1 decimal place
+        dailyAverage,
       });
     } catch (error) {
       console.error("Error calculating review stats:", error);
