@@ -50,6 +50,11 @@ export function MainNav() {
       label: "Setup",
       active: pathname === "/setup",
     },
+    {
+      href: "/bug-report",
+      label: "Bug Report",
+      active: pathname === "/bug-report",
+    },
   ];
 
   return (
