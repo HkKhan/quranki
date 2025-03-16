@@ -111,6 +111,7 @@ export default function ReviewPage() {
 
   const loadAyahs = async () => {
     setIsLoading(true);
+    setReviewStatus("loading");
     try {
       let response;
       
@@ -119,13 +120,11 @@ export default function ReviewPage() {
       
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
-        console.log("Loading ayahs for juzaa:", juzParam); // Debug log
         response = await fetch(
           `/api/quran?action=review&juz=${juzParam}&count=${count}`
         );
       } else {
         const surahParam = settings.selectedSurahs.join(",");
-        console.log("Loading ayahs for surahs:", surahParam); // Debug log
         response = await fetch(
           `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`
         );
@@ -141,43 +140,42 @@ export default function ReviewPage() {
         return;
       }
 
-      // Load spaced repetition data for each ayah from the database
-      const ayahPromises = data.ayahs.map(async (ayah: QuranAyah) => {
-        try {
-          const srResponse = await fetch(`/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`);
-          const srData = await srResponse.json();
-          
-          if (srData.data) {
-            return {
-              ...ayah,
-              interval: srData.data.interval,
-              repetitions: srData.data.repetitions,
-              easeFactor: srData.data.easeFactor,
-              lastReviewed: srData.data.lastReviewed,
-              dueDate: srData.data.dueDate,
-            };
+      // Load all data before updating state
+      const ayahsWithSR = await Promise.all(
+        data.ayahs.map(async (ayah: QuranAyah) => {
+          try {
+            const srResponse = await fetch(`/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`);
+            const srData = await srResponse.json();
+            
+            if (srData.data) {
+              return {
+                ...ayah,
+                interval: srData.data.interval,
+                repetitions: srData.data.repetitions,
+                easeFactor: srData.data.easeFactor,
+                lastReviewed: srData.data.lastReviewed,
+                dueDate: srData.data.dueDate,
+              };
+            }
+            return ayah;
+          } catch (error) {
+            return ayah;
           }
-          return ayah;
-        } catch (error) {
-          console.error("Error loading spaced repetition data:", error);
-          return ayah;
-        }
-      });
+        })
+      );
 
-      const ayahsWithSR = await Promise.all(ayahPromises);
+      // Load initial next ayahs before updating state
+      if (ayahsWithSR.length > 0) {
+        await loadNextAyahs(ayahsWithSR[0]);
+      }
 
+      // Update all state at once
       setAyahs(ayahsWithSR);
       setReviewAyahs(ayahsWithSR);
       setCurrentAyahIndex(0);
       setReviewedCount(0);
       setReviewStatus("question");
-
-      // Load the first set of next ayahs
-      if (ayahsWithSR.length > 0) {
-        loadNextAyahs(ayahsWithSR[0]);
-      }
     } catch (error) {
-      console.error("Error loading ayahs:", error);
       setError("Failed to load Quran data. Please try again later.");
       setReviewStatus("error");
     } finally {
@@ -266,9 +264,8 @@ export default function ReviewPage() {
     // Initialize spaced repetition values if they don't exist
     if (!currentAyah.interval) currentAyah.interval = 0;
     if (!currentAyah.repetitions) currentAyah.repetitions = 0;
-    if (!currentAyah.easeFactor) currentAyah.easeFactor = 2.5; // Initial ease factor
+    if (!currentAyah.easeFactor) currentAyah.easeFactor = 2.5;
 
-    // Convert remembered boolean to Anki-style rating (1 for false, 3 for true)
     const quality = remembered ? 3 : 1;
 
     // Apply SM-2 algorithm
@@ -303,7 +300,7 @@ export default function ReviewPage() {
       repetitions: nextRepetitions,
       easeFactor: nextEaseFactor,
       lastReviewed: Date.now(),
-      dueDate: Date.now() + nextInterval * 24 * 60 * 60 * 1000, // Convert days to milliseconds
+      dueDate: Date.now() + nextInterval * 24 * 60 * 60 * 1000,
     };
 
     // Save to database
@@ -325,10 +322,11 @@ export default function ReviewPage() {
       });
 
       if (!response.ok) {
-        console.error("Failed to save spaced repetition data");
+        throw new Error("Failed to save spaced repetition data");
       }
     } catch (error) {
-      console.error("Error saving spaced repetition data:", error);
+      // Silently handle error - we don't want to interrupt the user's review
+      // The data will be updated on their next review
     }
 
     // Save daily log
@@ -345,7 +343,7 @@ export default function ReviewPage() {
         }),
       });
     } catch (error) {
-      console.error("Error saving daily log:", error);
+      // Silently handle error - daily logs are not critical
     }
 
     // Update the review ayahs array with the updated ayah
@@ -355,12 +353,13 @@ export default function ReviewPage() {
 
     // Move to the next ayah or complete the review
     if (currentAyahIndex < reviewAyahs.length - 1) {
-      setCurrentAyahIndex(currentAyahIndex + 1);
+      const nextIndex = currentAyahIndex + 1;
+      await loadNextAyahs(reviewAyahs[nextIndex]);
+      setCurrentAyahIndex(nextIndex);
       setReviewedCount(reviewedCount + 1);
       setShowTranslation(false);
       setShowArabic(false);
       setReviewStatus("question");
-      loadNextAyahs(reviewAyahs[currentAyahIndex + 1]);
     } else {
       setReviewStatus("complete");
     }
