@@ -5,67 +5,21 @@
 /**
  * Get the current date in YYYY-MM-DD format in the user's timezone or default to US Eastern
  */
-export function getTodayDateString(userTimezone?: string): string {
-  // Always force US Eastern timezone
-  const defaultTimezone = 'America/New_York'; // US Eastern
-  const timezone = defaultTimezone; // Ignore userTimezone to ensure consistency
-  
+export function getTodayDateString(): string {
   const now = new Date();
-  console.log(`[date-utils] Raw Date before formatting: ${now.toString()}`);
-  
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  };
-  
-  const formatter = new Intl.DateTimeFormat('en-US', options);
-  const parts = formatter.formatToParts(now);
-  
-  const month = parts.find(part => part.type === 'month')?.value || '01';
-  const day = parts.find(part => part.type === 'day')?.value || '01';
-  const year = parts.find(part => part.type === 'year')?.value || '2000';
-  
-  const result = `${year}-${month}-${day}`;
-  
-  // Debug logging to help track timezone issues
-  if (typeof window !== "undefined") {
-    console.log(`[date-utils] getTodayDateString (US Eastern): ${result}`);
-    console.log(`[date-utils] Local browser date: ${new Date().toLocaleDateString()}`);
-    console.log(`[date-utils] Browser timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
-  }
-  
+  const usEasternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const result = dateToYYYYMMDD(usEasternTime);
   return result;
 }
 
 /**
  * Convert a date to YYYY-MM-DD format in the user's timezone or default to US Eastern
  */
-export function dateToYYYYMMDD(date: Date, userTimezone?: string): string {
-  // Always force US Eastern timezone 
-  const defaultTimezone = 'America/New_York'; // US Eastern
-  const timezone = defaultTimezone; // Ignore userTimezone to ensure consistency
-  
-  console.log(`[date-utils] dateToYYYYMMDD input: ${date.toString()}`);
-  
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  };
-  
-  const formatter = new Intl.DateTimeFormat('en-US', options);
-  const parts = formatter.formatToParts(date);
-  
-  const month = parts.find(part => part.type === 'month')?.value || '01';
-  const day = parts.find(part => part.type === 'day')?.value || '01';
-  const year = parts.find(part => part.type === 'year')?.value || '2000';
-  
+export function dateToYYYYMMDD(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   const result = `${year}-${month}-${day}`;
-  console.log(`[date-utils] dateToYYYYMMDD result: ${result}`);
-  
   return result;
 }
 
@@ -115,8 +69,8 @@ export function getTodayInTimezone(userTimezone?: string): Date {
  * Check if a date is before today in the user's timezone
  */
 export function isBeforeToday(date: Date, userTimezone?: string): boolean {
-  const todayString = getTodayDateString(userTimezone);
-  const dateString = dateToYYYYMMDD(date, userTimezone);
+  const todayString = getTodayDateString();
+  const dateString = dateToYYYYMMDD(date);
   return dateString < todayString;
 }
 
@@ -124,8 +78,8 @@ export function isBeforeToday(date: Date, userTimezone?: string): boolean {
  * Check if a date is today in the user's timezone
  */
 export function isToday(date: Date, userTimezone?: string): boolean {
-  const todayString = getTodayDateString(userTimezone);
-  const dateString = dateToYYYYMMDD(date, userTimezone);
+  const todayString = getTodayDateString();
+  const dateString = dateToYYYYMMDD(date);
   return dateString === todayString;
 }
 
