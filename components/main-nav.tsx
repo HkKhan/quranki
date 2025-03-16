@@ -115,7 +115,7 @@ export function MainNav() {
                   {session.user.name || session.user.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => signOut()}>
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: '/' })}>
                   Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
