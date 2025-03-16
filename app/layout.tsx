@@ -2,6 +2,9 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { MainNav } from "@/components/main-nav";
+import { Providers } from './providers';
+import { Metadata } from "next";
+import { ToastProvider } from "@/components/ui/toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -10,35 +13,48 @@ const baseUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : "https://quranki.vercel.app";
 
-export const metadata = {
-  title: "QuranKi - Spaced Repetition for Quran Memorization",
-  description:
-    "A spaced repetition system designed for Quran memorization and review",
-  metadataBase: new URL(baseUrl),
+export const metadata: Metadata = {
+  title: {
+    default: "Quranki",
+    template: "%s | Quranki",
+  },
+  description: "An intelligent spaced repetition system designed specifically for Quran review.",
+  keywords: [
+    "Quran",
+    "Review",
+    "Spaced Repetition",
+    "Islamic",
+    "Muslim",
+    "Learning",
+    "Education",
+  ],
+  authors: [
+    {
+      name: "Quranki",
+      url: "https://quranki.com",
+    },
+  ],
+  creator: "Quranki",
   openGraph: {
-    title: "QuranKi - Spaced Repetition for Quran Memorization",
-    description:
-      "Strengthen your Quran memorization with spaced repetition techniques",
-    url: baseUrl,
-    siteName: "QuranKi",
-    images: [
-      {
-        url: "/quranki_logo.png",
-        width: 1024,
-        height: 1024,
-        alt: "QuranKi Logo - Spaced Repetition for Quran Memorization",
-      },
-    ],
-    locale: "en_US",
     type: "website",
+    locale: "en_US",
+    url: "https://quranki.com",
+    title: "Quranki",
+    description: "An intelligent spaced repetition system designed specifically for Quran review.",
+    siteName: "Quranki",
   },
   twitter: {
     card: "summary_large_image",
-    title: "QuranKi - Spaced Repetition for Quran Memorization",
-    description:
-      "Strengthen your Quran memorization with spaced repetition techniques",
-    images: ["/quranki_logo.png"],
+    title: "Quranki",
+    description: "An intelligent spaced repetition system designed specifically for Quran review.",
+    creator: "@quranki",
   },
+  icons: {
+    icon: "/quranmeta.ico",
+    shortcut: "/quranmeta.ico",
+    apple: "/quranmeta.ico",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -49,6 +65,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/quranmeta.ico" />
+        <link rel="apple-touch-icon" href="/quranmeta.ico" />
+        <link rel="shortcut icon" href="/quranmeta.ico" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -63,46 +82,50 @@ export default function RootLayout({
       <body
         className={`${inter.className} min-h-screen bg-background font-sans antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          <div className="flex min-h-screen flex-col">
-            <MainNav />
-            <main className="flex-1">
-              {children}
-            </main>
-            <footer className="border-t py-6 md:py-0">
-              <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
-                <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-                  © {new Date().getFullYear()} QuranKi. All rights reserved.
-                </p>
-                <div className="flex gap-4">
-                  <a
-                    href="/privacy"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Privacy
-                  </a>
-                  <a
-                    href="/terms"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Terms
-                  </a>
-                  <a
-                    href="/contact"
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Contact
-                  </a>
-                </div>
+        <Providers>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ToastProvider>
+              <div className="flex min-h-screen flex-col">
+                <MainNav />
+                <main className="flex-1">
+                  {children}
+                </main>
+                <footer className="border-t py-6 md:py-0">
+                  <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
+                    <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
+                      © {new Date().getFullYear()} QuranKi. All rights reserved.
+                    </p>
+                    <div className="flex gap-4">
+                      <a
+                        href="/privacy"
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Privacy
+                      </a>
+                      <a
+                        href="/terms"
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Terms
+                      </a>
+                      <a
+                        href="/contact"
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Contact
+                      </a>
+                    </div>
+                  </div>
+                </footer>
               </div>
-            </footer>
-          </div>
-        </ThemeProvider>
+            </ToastProvider>
+          </ThemeProvider>
+        </Providers>
       </body>
     </html>
   );

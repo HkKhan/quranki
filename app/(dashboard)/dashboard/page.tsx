@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { ReviewHeatmap } from "@/components/review-heatmap";
 import { StatsCards } from "@/components/stats-cards";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface QuranStats {
   totalAyahs: number;
@@ -46,6 +48,8 @@ interface ReviewData {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [settings, setSettings] = useState<{
     selectedJuzaa: number[];
     selectedSurahs: number[];
@@ -68,39 +72,111 @@ export default function DashboardPage() {
   const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    let mounted = true;
+
+    const initializeDashboard = async () => {
+      // Don't do anything while session is loading
+      if (status === 'loading') {
+        setIsLoading(true);
+        return;
+      }
+
+      // If no session, redirect to login
+      if (!session?.user?.id) {
+        router.replace('/login');
+        return;
+      }
+
+      // Only load data if component is still mounted
+      if (mounted) {
+        try {
+          await loadDashboardData();
+        } catch (error) {
+          console.error("Failed to load dashboard:", error);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeDashboard();
+
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id, status]);
 
   const loadDashboardData = async () => {
-    // Skip localStorage access during server-side rendering
-    if (typeof window === "undefined") {
+    try {
+      setIsLoading(true);
+      
+      // Fetch user settings from the database
+      const settingsResponse = await fetch("/api/settings", {
+        // Add cache control headers to prevent caching
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+
+      if (!settingsResponse.ok) {
+        if (settingsResponse.status === 401) {
+          router.replace('/login');
+          return;
+        }
+        throw new Error('Failed to fetch settings');
+      }
+      
+      const settingsData = await settingsResponse.json();
+      
+      if (!settingsData.settings) {
+        setSettings(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const userSettings = settingsData.settings;
+      setSettings(userSettings);
+
+      // Wrap all API calls in a single try-catch
+      try {
+        await Promise.all([
+          // Stats for selected juzaa or surahs
+          userSettings.selectionType === "juzaa" 
+            ? fetchQuranStats(userSettings.selectedJuzaa)
+            : fetchQuranStatsBySurah(userSettings.selectedSurahs),
+          
+          // Load surahs if needed
+          userSettings.selectionType === "surah" 
+            ? loadAllSurahs()
+            : Promise.resolve(),
+          
+          // Calculate review stats
+          calculateAllReviewStats()
+        ]);
+      } catch (error) {
+        console.error("Error loading stats:", error);
+        // Set safe default values but don't break the page
+        setQuranStats({
+          totalAyahs: 0,
+          selectedJuzAyahs: 0,
+          selectedSurahAyahs: 0,
+        });
+        setReviewStats({
+          dueToday: 0,
+          reviewedToday: 0,
+          streak: 0,
+          totalReviewed: 0,
+          dailyAverage: 0,
+        });
+      }
+    } catch (error) {
+      console.error("Error in loadDashboardData:", error);
+      setSettings(null);
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      const parsedSettings = JSON.parse(savedSettings);
-      setSettings(parsedSettings);
-
-      // Fetch stats for the selected juzaa or surahs
-      if (parsedSettings.selectionType === "juzaa") {
-        await fetchQuranStats(parsedSettings.selectedJuzaa);
-      } else {
-        await fetchQuranStatsBySurah(parsedSettings.selectedSurahs);
-      }
-
-      // Load all surahs info if selection type is "surah"
-      if (parsedSettings.selectionType === "surah") {
-        await loadAllSurahs();
-      }
-
-      // Calculate combined review statistics from all ayahs (both juzaa and surah)
-      calculateAllReviewStats();
-    }
-
-    setIsLoading(false);
   };
 
   const loadAllSurahs = async () => {
@@ -149,13 +225,65 @@ export default function DashboardPage() {
     }
   };
 
-  // Calculate review stats for all ayahs reviewed regardless of selection type
-  const calculateAllReviewStats = async () => {
-    try {
-      // Skip localStorage access during server-side rendering
-      if (typeof window === "undefined") {
+  const fetchQuranStats = async (juzNumbers: number[]) => {
+    const [basicResponse, juzResponse] = await Promise.all([
+      fetch("/api/quran?action=load", {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }),
+      fetch(`/api/quran?action=juz&juz=${juzNumbers.join(",")}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      })
+    ]);
+
+    if (!basicResponse.ok || !juzResponse.ok) {
+      if (basicResponse.status === 401 || juzResponse.status === 401) {
+        router.replace('/login');
         return;
       }
+      throw new Error('Failed to fetch Quran stats');
+    }
+
+    const [basicData, juzData] = await Promise.all([
+      basicResponse.json(),
+      juzResponse.json()
+    ]);
+
+    if (basicData.success && juzData.success) {
+      setQuranStats({
+        totalAyahs: basicData.count || 0,
+        selectedJuzAyahs: juzData.ayahs?.length || 0,
+        selectedSurahAyahs: 0,
+      });
+    }
+  };
+
+  const calculateAllReviewStats = async () => {
+    try {
+      const [srResponse, logsResponse] = await Promise.all([
+        fetch("/api/spaced-repetition"),
+        fetch("/api/daily-logs")
+      ]);
+
+      if (!srResponse.ok || !logsResponse.ok) {
+        if (srResponse.status === 401 || logsResponse.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error('Failed to fetch review stats');
+      }
+
+      const [srData, logsData] = await Promise.all([
+        srResponse.json(),
+        logsResponse.json()
+      ]);
 
       // For tracking streaks and daily activity
       const reviewDays = new Set<string>();
@@ -168,53 +296,33 @@ export default function DashboardPage() {
       const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
       const startOfDay = new Date(now).setHours(0, 0, 0, 0);
       const endOfDay = new Date(now).setHours(23, 59, 59, 999);
-      
-      // Get all keys in localStorage for SR data and daily logs
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-        
-        // Process SR data for individual ayahs
-        if (key.startsWith("quranki_sr_")) {
-          const srDataStr = localStorage.getItem(key);
-          if (srDataStr) {
-            const srData = JSON.parse(srDataStr);
-            totalReviewed++;
-            
-            // Check if due today
-            if (srData.dueDate >= startOfDay && srData.dueDate <= endOfDay) {
-              dueToday++;
-            }
-            
-            // Record the review date for streak calculation
-            if (srData.reviewDate) {
-              reviewDays.add(srData.reviewDate);
-            }
-            else if (srData.lastReviewed) {
-              // For backward compatibility with older data
-              const reviewDate = new Date(srData.lastReviewed).toISOString().split('T')[0];
-              reviewDays.add(reviewDate);
-            }
+
+      if (srData.data) {
+        // Count ayahs due today
+        dueToday = srData.data.filter((item: ReviewData) => {
+          return item.dueDate >= startOfDay && item.dueDate <= endOfDay;
+        }).length;
+
+        // Record review dates for streak calculation
+        srData.data.forEach((item: ReviewData) => {
+          if (item.lastReviewed) {
+            const reviewDate = new Date(item.lastReviewed).toISOString().split('T')[0];
+            reviewDays.add(reviewDate);
           }
-        }
-        
-        // Process daily logs for activity calculation
-        else if (key.startsWith("quranki_daily_log_")) {
-          const date = key.replace("quranki_daily_log_", "");
+        });
+      }
+
+      if (logsData.logs) {
+        logsData.logs.forEach((log: any) => {
+          const date = log.date;
           reviewDays.add(date);
           
-          const logData = localStorage.getItem(key);
-          if (logData) {
-            const log = JSON.parse(logData);
-            const ayahsReviewedThisDay = Object.keys(log).length;
-            dailyReviews[date] = ayahsReviewedThisDay;
-            
-            // Count today's reviews
-            if (date === today) {
-              dailyReviews[today] = Object.keys(log).length;
-            }
+          if (!dailyReviews[date]) {
+            dailyReviews[date] = 0;
           }
-        }
+          dailyReviews[date] += log.count;
+          totalReviewed += log.count; // Add to total reviews
+        });
       }
       
       // Calculate streak (consecutive days of review)
@@ -249,45 +357,25 @@ export default function DashboardPage() {
       const dailyAverage = daysWithActivity > 0 
         ? totalDailyReviews / daysWithActivity 
         : 0;
-        
-      // Calculate today's reviews
-      const reviewedToday = dailyReviews[today] || 0;
-      
+
+      // Update review stats
       setReviewStats({
         dueToday,
-        reviewedToday,
+        reviewedToday: dailyReviews[today] || 0,
         streak,
         totalReviewed,
-        dailyAverage: Math.round(dailyAverage * 10) / 10, // Round to 1 decimal place
+        dailyAverage,
       });
     } catch (error) {
       console.error("Error calculating review stats:", error);
-    }
-  };
-
-  const fetchQuranStats = async (juzNumbers: number[]) => {
-    try {
-      // First, get basic info about the Quran data
-      const basicResponse = await fetch("/api/quran?action=load");
-      const basicData = await basicResponse.json();
-
-      if (basicData.success) {
-        // Then get ayahs for the selected juzaa
-        const juzResponse = await fetch(
-          `/api/quran?action=juz&juz=${juzNumbers.join(",")}`
-        );
-        const juzData = await juzResponse.json();
-
-        if (juzData.success) {
-          setQuranStats({
-            totalAyahs: basicData.count || 0,
-            selectedJuzAyahs: juzData.ayahs?.length || 0,
-            selectedSurahAyahs: 0,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching Quran stats:", error);
+      // Set safe default values
+      setReviewStats({
+        dueToday: 0,
+        reviewedToday: 0,
+        streak: 0,
+        totalReviewed: 0,
+        dailyAverage: 0,
+      });
     }
   };
 

@@ -26,6 +26,7 @@ import {
   BookText,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useSession } from "next-auth/react";
 
 // Interface for Surah type
 interface SurahInfo {
@@ -37,6 +38,7 @@ interface SurahInfo {
 
 export default function SetupPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [selectedJuzaa, setSelectedJuzaa] = useState<number[]>([]);
   const [selectedSurahs, setSelectedSurahs] = useState<number[]>([]);
   const [ayahsAfter, setAyahsAfter] = useState(2);
@@ -46,41 +48,37 @@ export default function SetupPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [selectionType, setSelectionType] = useState<"juzaa" | "surah">("juzaa");
   const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
-  const [surahGroups, setSurahGroups] = useState<{ name: string; surahList: SurahInfo[] }[]>([]);
-
-  const juzGroups = [
-    {
-      name: "Juz 1-10",
-      juzaaList: Array.from({ length: 10 }, (_, i) => i + 1),
-    },
-    {
-      name: "Juz 11-20",
-      juzaaList: Array.from({ length: 10 }, (_, i) => i + 11),
-    },
-    {
-      name: "Juz 21-30",
-      juzaaList: Array.from({ length: 10 }, (_, i) => i + 21),
-    },
-  ];
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load existing settings if available
-    const savedSettings = localStorage.getItem("quranReviewSettings");
-    if (savedSettings) {
-      const settings = JSON.parse(savedSettings);
-      setSelectedJuzaa(settings.selectedJuzaa || []);
-      setSelectedSurahs(settings.selectedSurahs || []);
-      setAyahsAfter(settings.ayahsAfter || 2);
-      setPromptsPerSession(settings.promptsPerSession || 20);
-      setSelectionType(settings.selectionType || "juzaa");
+    if (!session?.user?.id) {
+      router.push('/login');
+      return;
     }
 
-    // Load all surahs
-    loadSurahs();
+    // Load existing settings from the database
+    const loadSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        const data = await response.json();
 
-    // Verify that the Quran data is available
-    verifyQuranData();
-  }, []);
+        if (data.settings) {
+          setSelectedJuzaa(data.settings.selectedJuzaa || []);
+          setSelectedSurahs(data.settings.selectedSurahs || []);
+          setAyahsAfter(data.settings.ayahsAfter || 2);
+          setPromptsPerSession(data.settings.promptsPerSession || 20);
+          setSelectionType(data.settings.selectionType || "juzaa");
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        setError('Failed to load settings');
+      }
+    };
+
+    // Load all surahs and settings
+    Promise.all([loadSurahs(), loadSettings(), verifyQuranData()])
+      .finally(() => setIsLoading(false));
+  }, [session, router]);
 
   const loadSurahs = async () => {
     try {
@@ -92,6 +90,7 @@ export default function SetupPage() {
       }
     } catch (error) {
       console.error("Error loading surahs:", error);
+      setError('Failed to load surahs');
     }
   };
 
@@ -103,12 +102,13 @@ export default function SetupPage() {
 
       if (!data.success) {
         console.error("Error verifying Quran data:", data.error);
+        setError('Failed to verify Quran data');
       }
     } catch (error) {
       console.error("Error verifying Quran data:", error);
+      setError('Failed to verify Quran data');
     } finally {
       setIsVerifying(false);
-      setIsLoading(false);
     }
   };
 
@@ -178,47 +178,55 @@ export default function SetupPage() {
   const handleSave = async () => {
     if ((selectionType === "juzaa" && selectedJuzaa.length === 0) || 
         (selectionType === "surah" && selectedSurahs.length === 0)) {
-      console.error("Selection Required");
+      setError("Please select at least one juzaa or surah");
       return;
     }
 
     setIsSaving(true);
+    setError(null);
 
-    // Save settings to localStorage
-    const settings = {
-      selectedJuzaa,
-      selectedSurahs,
-      selectionType,
-      ayahsAfter,
-      promptsPerSession,
-    };
-    localStorage.setItem("quranReviewSettings", JSON.stringify(settings));
-
-    // Verify that we can load ayahs from the selected items
     try {
-      let response;
+      // Save settings to database
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedJuzaa,
+          selectedSurahs,
+          selectionType,
+          ayahsAfter,
+          promptsPerSession,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save settings');
+      }
+
+      // Verify that we can load ayahs from the selected items
+      let verifyResponse;
       if (selectionType === "juzaa") {
-        response = await fetch(
+        verifyResponse = await fetch(
           `/api/quran?action=juz&juz=${selectedJuzaa.join(",")}`
         );
       } else {
-        response = await fetch(
+        verifyResponse = await fetch(
           `/api/quran?action=surah&surah=${selectedSurahs.join(",")}`
         );
       }
       
-      const data = await response.json();
+      const data = await verifyResponse.json();
 
       if (!data.success || !data.ayahs || data.ayahs.length === 0) {
-        console.error("No Ayahs Found");
-        setIsSaving(false);
-        return;
+        throw new Error('No ayahs found for the selected content');
       }
 
       // Navigate to dashboard on success
       router.push("/dashboard");
     } catch (error) {
-      console.error("Error verifying selection:", error);
+      console.error("Error saving settings:", error);
+      setError(error instanceof Error ? error.message : 'Failed to save settings');
+    } finally {
       setIsSaving(false);
     }
   };
