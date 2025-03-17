@@ -51,6 +51,7 @@ export default function ReviewPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(true);
+  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [ayahs, setAyahs] = useState<any[]>([]);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
   const [showTranslation, setShowTranslation] = useState(false);
@@ -60,13 +61,13 @@ export default function ReviewPage() {
   const [reviewedCount, setReviewedCount] = useState(0);
   const [nextAyahs, setNextAyahs] = useState<QuranAyah[]>([]);
   const [prevAyahs, setPrevAyahs] = useState<QuranAyah[]>([]);
-  const [settings, setSettings] = useState({
-    selectedJuzaa: [30],
-    selectedSurahs: [],
-    selectionType: "juzaa" as "juzaa" | "surah",
-    ayahsAfter: 2,
-    promptsPerSession: 20,
-  });
+  const [settings, setSettings] = useState<{
+    selectedJuzaa: number[];
+    selectedSurahs: number[];
+    selectionType: "juzaa" | "surah";
+    ayahsAfter: number;
+    promptsPerSession: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,42 +75,54 @@ export default function ReviewPage() {
       router.push('/login');
       return;
     }
+  }, [session, router]);
 
-    // Load settings from database
+  // Separate effect for loading settings
+  useEffect(() => {
     const loadSettings = async () => {
+      if (!session?.user?.id) return;
+      
       try {
+        console.log('Fetching user settings...');
         const response = await fetch('/api/settings');
         const data = await response.json();
+        console.log('Received settings:', data);
 
         if (data.settings) {
-          const userSettings = {
-            selectedJuzaa: data.settings.selectedJuzaa || [30],
-            selectedSurahs: data.settings.selectedSurahs || [],
-            selectionType: data.settings.selectionType || "juzaa",
-            ayahsAfter: data.settings.ayahsAfter || 2,
-            promptsPerSession: data.settings.promptsPerSession || 20,
-          };
-          setSettings(userSettings);
-          // Instead of calling loadAyahs here, the second useEffect will handle it
+          console.log('Setting user settings:', data.settings);
+          setSettings(data.settings);
+          setIsSettingsLoading(false);
+        } else {
+          console.log('No settings found');
+          setError('Please configure your review settings first');
+          setReviewStatus('error');
+          setIsSettingsLoading(false);
         }
       } catch (error) {
         console.error('Error loading settings:', error);
         setError('Failed to load settings');
-        setReviewStatus("error");
+        setReviewStatus('error');
+        setIsSettingsLoading(false);
       }
     };
 
     loadSettings();
-  }, [session, router]);
+  }, [session?.user?.id]);
 
-  // New useEffect to handle loading ayahs when settings change
+  // Separate effect for loading ayahs when settings are available
   useEffect(() => {
-    if (session?.user?.id && settings) {
+    if (!isSettingsLoading && settings) {
+      console.log('Settings loaded, loading ayahs with:', settings);
       loadAyahs();
     }
-  }, [settings, session?.user?.id]);
+  }, [isSettingsLoading, settings]);
 
   const loadAyahs = async () => {
+    if (!settings) {
+      console.log('No settings available, cannot load ayahs');
+      return;
+    }
+
     setIsLoading(true);
     setReviewStatus("loading");
     try {
@@ -118,15 +131,31 @@ export default function ReviewPage() {
       // Use the configured promptsPerSession or default to 20 if not set
       const count = settings.promptsPerSession || 20;
       
+      console.log('Loading ayahs with settings:', settings);
+      
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
-          `/api/quran?action=review&juz=${juzParam}&count=${count}`
+          `/api/quran?action=review&juz=${juzParam}&count=${count}`,
+          {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
       } else {
         const surahParam = settings.selectedSurahs.join(",");
         response = await fetch(
-          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`
+          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`,
+          {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
       }
       
@@ -184,11 +213,23 @@ export default function ReviewPage() {
   };
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
+    if (!settings) {
+      console.log('No settings available, cannot load next ayahs');
+      return;
+    }
+
     try {
       // Only fetch previous ayahs if we're not at the start of a surah
       if (currentAyah.ayah_no_surah > 1) {
         const prevResponse = await fetch(
-          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`
+          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`,
+          {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
         const prevData = await prevResponse.json();
         
@@ -214,7 +255,14 @@ export default function ReviewPage() {
       
       // First check if we need to respect surah boundaries
       const surahCountResponse = await fetch(
-        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`
+        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`,
+        {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }
       );
       const surahCountData = await surahCountResponse.json();
       
@@ -231,7 +279,14 @@ export default function ReviewPage() {
         }
         
         const response = await fetch(
-          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`
+          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`,
+          {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
         const data = await response.json();
 
@@ -369,11 +424,11 @@ export default function ReviewPage() {
     loadAyahs();
   };
 
-  if (reviewStatus === "loading") {
+  if (isSettingsLoading || isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p>Loading Quran data...</p>
+        <p>{isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}</p>
       </div>
     );
   }
@@ -490,7 +545,7 @@ export default function ReviewPage() {
               </div>
               <div className="text-center">
                 <p className="mb-2 font-medium">
-                  Continue reciting the next {settings.ayahsAfter} ayahs from
+                  Continue reciting the next {settings?.ayahsAfter || 0} ayahs from
                   memory
                 </p>
                 <p className="text-sm text-muted-foreground mb-6">

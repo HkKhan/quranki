@@ -139,6 +139,9 @@ export default function DashboardPage() {
       const userSettings = settingsData.settings;
       setSettings(userSettings);
 
+      // Preload review data based on user settings
+      await preloadReviewData(userSettings);
+
       // Wrap all API calls in a single try-catch
       try {
         await Promise.all([
@@ -376,6 +379,35 @@ export default function DashboardPage() {
         totalReviewed: 0,
         dailyAverage: 0,
       });
+    }
+  };
+
+  // Add new function to preload review data
+  const preloadReviewData = async (userSettings: any) => {
+    try {
+      // Preload review data based on selection type
+      if (userSettings.selectionType === "juzaa") {
+        const juzParam = userSettings.selectedJuzaa.join(",");
+        await fetch(`/api/quran?action=review&juz=${juzParam}&count=${userSettings.promptsPerSession}`);
+      } else {
+        const surahParam = userSettings.selectedSurahs.join(",");
+        await fetch(`/api/quran?action=reviewBySurah&surah=${surahParam}&count=${userSettings.promptsPerSession}`);
+      }
+
+      // Preload spaced repetition data for the first few ayahs
+      const firstAyahResponse = await fetch(`/api/quran?action=${userSettings.selectionType === "juzaa" ? "juz" : "surah"}&${userSettings.selectionType === "juzaa" ? "juz" : "surah"}=${userSettings.selectionType === "juzaa" ? userSettings.selectedJuzaa[0] : userSettings.selectedSurahs[0]}`);
+      const firstAyahData = await firstAyahResponse.json();
+      
+      if (firstAyahData.success && firstAyahData.ayahs) {
+        // Preload SR data for the first 5 ayahs
+        await Promise.all(
+          firstAyahData.ayahs.slice(0, 5).map(async (ayah: any) => {
+            await fetch(`/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`);
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Error preloading review data:", error);
     }
   };
 
