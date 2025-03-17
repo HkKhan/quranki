@@ -1,0 +1,15 @@
+0000000000000000000000000000000000000000 a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 Muneer Khan <mk@Muneers-Laptop.local> 1741811108 -0400	clone: from https://github.com/HkKhan/quranki.git
+a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 fccfef339830eb4dbf4028d4a155d6c867907e0f Muneer Khan <mk@Muneers-Laptop.local> 1741838247 -0400	pull: Fast-forward
+fccfef339830eb4dbf4028d4a155d6c867907e0f 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1741839747 -0400	pull origin main: Fast-forward
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741901941 -0400	commit: Added some dependencies
+0b67225efb43a52cdc7d40071efebca19a300498 a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db Muneer Khan <mk@Muneers-Laptop.local> 1741933551 -0400	pull: Fast-forward
+a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db ca09520619228d2706030fb85d26a2898e320581 Muneer Khan <mk@Muneers-Laptop.local> 1741933710 -0400	commit: Reverted to old
+ca09520619228d2706030fb85d26a2898e320581 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1741933905 -0400	reset: moving to revert-to-old-state
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 a029ed145973862da72dad178bc8cc0bcce51898 Muneer Khan <mk@Muneers-Laptop.local> 1741934271 -0400	commit: Extra file added to deploy
+a029ed145973862da72dad178bc8cc0bcce51898 060c041b785df96eb768a491b161bed46f660c27 Muneer Khan <mk@Muneers-Laptop.local> 1742099183 -0400	pull origin main: Fast-forward
+060c041b785df96eb768a491b161bed46f660c27 2ec2516730308db5bf57112ec369f96ce1eafded Muneer Khan <mk@Muneers-Laptop.local> 1742099498 -0400	commit: Removed unnecessary console logs for production build and fixed metadata icon
+2ec2516730308db5bf57112ec369f96ce1eafded 9c83c190251ffd762723d69f7f60d394c0b1d7b5 Muneer Khan <mk@Muneers-Laptop.local> 1742100370 -0400	pull origin main: Fast-forward
+9c83c190251ffd762723d69f7f60d394c0b1d7b5 0c1208fafecdc64777c676f9f16d2ac9cab1b2c3 Muneer Khan <mk@Muneers-Laptop.local> 1742165124 -0400	commit: Fixed issue with signout going to invalid URL
+0c1208fafecdc64777c676f9f16d2ac9cab1b2c3 6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 Muneer Khan <mk@Muneers-Laptop.local> 1742165256 -0400	commit: Tried another fix
+6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 78527d30c01adae2ff2ca369b6f1292aba0926cf Muneer Khan <mk@Muneers-Laptop.local> 1742228441 -0400	pull origin main: Fast-forward
+78527d30c01adae2ff2ca369b6f1292aba0926cf 84617f030ea96757c549926c43265d09a327f4dc Muneer Khan <mk@Muneers-Laptop.local> 1742233203 -0400	commit: Added web analytics

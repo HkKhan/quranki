@@ -1,0 +1,98 @@
+0000000000000000000000000000000000000000 a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 Muneer Khan <mk@Muneers-Laptop.local> 1741811108 -0400	clone: from https://github.com/HkKhan/quranki.git
+a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 Muneer Khan <mk@Muneers-Laptop.local> 1741811570 -0400	checkout: moving from main to surah-option
+a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 6d287d90e8452120e87f0fc1bf35ed6274fb4ce2 Muneer Khan <mk@Muneers-Laptop.local> 1741835307 -0400	commit: Added surah option, fixed issue with ayahs from next surah, made consistent navbar across pages, fixed learn more button
+6d287d90e8452120e87f0fc1bf35ed6274fb4ce2 fccfef339830eb4dbf4028d4a155d6c867907e0f Muneer Khan <mk@Muneers-Laptop.local> 1741838018 -0400	pull origin main: Fast-forward
+fccfef339830eb4dbf4028d4a155d6c867907e0f a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 Muneer Khan <mk@Muneers-Laptop.local> 1741838244 -0400	checkout: moving from surah-option to main
+a0059f3a9f6f709a2de142c74b7b3b44bd64bb67 fccfef339830eb4dbf4028d4a155d6c867907e0f Muneer Khan <mk@Muneers-Laptop.local> 1741838247 -0400	pull: Fast-forward
+fccfef339830eb4dbf4028d4a155d6c867907e0f fccfef339830eb4dbf4028d4a155d6c867907e0f Muneer Khan <mk@Muneers-Laptop.local> 1741838295 -0400	checkout: moving from main to fix-dark-mode-buttons
+fccfef339830eb4dbf4028d4a155d6c867907e0f c905f5dbff7045bfda41c9dba119ffbada2eafde Muneer Khan <mk@Muneers-Laptop.local> 1741839341 -0400	commit: Added feature to give 2 ayahs of context everytime, also added feature to choose how many ayahs user wants in a given review session
+c905f5dbff7045bfda41c9dba119ffbada2eafde fccfef339830eb4dbf4028d4a155d6c867907e0f Muneer Khan <mk@Muneers-Laptop.local> 1741839741 -0400	checkout: moving from fix-dark-mode-buttons to main
+fccfef339830eb4dbf4028d4a155d6c867907e0f 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1741839747 -0400	pull origin main: Fast-forward
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741901941 -0400	commit: Added some dependencies
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741901952 -0400	checkout: moving from main to login-feature
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741920009 -0400	checkout: moving from login-feature to main
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741920036 -0400	reset: moving to 0b67225
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741920108 -0400	reset: moving to origin/main
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741920123 -0400	reset: moving to 0b67225
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741920153 -0400	reset: moving to 0b67225
+0b67225efb43a52cdc7d40071efebca19a300498 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741920249 -0400	checkout: moving from main to login-feature
+0b67225efb43a52cdc7d40071efebca19a300498 2117fb8d5f040d0554ea3cbd06faf8624326f0d5 Muneer Khan <mk@Muneers-Laptop.local> 1741930167 -0400	commit: Added sign-in, and set up DB so everything pulls from there instead of local storage after initial migration when user signs in
+2117fb8d5f040d0554ea3cbd06faf8624326f0d5 b988d8f23d06b46af862280c3f56b61773cdb0c7 Muneer Khan <mk@Muneers-Laptop.local> 1741931192 -0400	commit: Fixed the account switching glitch
+b988d8f23d06b46af862280c3f56b61773cdb0c7 27772ab93356e3c7b1523915b20d6cee8d16745a Muneer Khan <mk@Muneers-Laptop.local> 1741932176 -0400	commit: Fixed vercel issues with prisma that were not allowing deployment
+27772ab93356e3c7b1523915b20d6cee8d16745a 13d79c52000ea2a2911601d7ed431f83b169cda6 Muneer Khan <mk@Muneers-Laptop.local> 1741932521 -0400	commit: Added some more in depth Vercel adjustments to try to deploy
+13d79c52000ea2a2911601d7ed431f83b169cda6 0b67225efb43a52cdc7d40071efebca19a300498 Muneer Khan <mk@Muneers-Laptop.local> 1741933549 -0400	checkout: moving from login-feature to main
+0b67225efb43a52cdc7d40071efebca19a300498 a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db Muneer Khan <mk@Muneers-Laptop.local> 1741933551 -0400	pull: Fast-forward
+a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db ca09520619228d2706030fb85d26a2898e320581 Muneer Khan <mk@Muneers-Laptop.local> 1741933710 -0400	commit: Reverted to old
+ca09520619228d2706030fb85d26a2898e320581 ca09520619228d2706030fb85d26a2898e320581 Muneer Khan <mk@Muneers-Laptop.local> 1741933791 -0400	reset: moving to ca09520619228d2706030fb85d26a2898e320581
+ca09520619228d2706030fb85d26a2898e320581 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1741933800 -0400	checkout: moving from main to revert-to-old-state
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 ca09520619228d2706030fb85d26a2898e320581 Muneer Khan <mk@Muneers-Laptop.local> 1741933905 -0400	checkout: moving from revert-to-old-state to main
+ca09520619228d2706030fb85d26a2898e320581 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1741933905 -0400	reset: moving to revert-to-old-state
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 a029ed145973862da72dad178bc8cc0bcce51898 Muneer Khan <mk@Muneers-Laptop.local> 1741934271 -0400	commit: Extra file added to deploy
+a029ed145973862da72dad178bc8cc0bcce51898 13d79c52000ea2a2911601d7ed431f83b169cda6 Muneer Khan <mk@Muneers-Laptop.local> 1741989499 -0400	checkout: moving from main to login-feature
+13d79c52000ea2a2911601d7ed431f83b169cda6 a029ed145973862da72dad178bc8cc0bcce51898 Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (start): checkout main
+a029ed145973862da72dad178bc8cc0bcce51898 d8b069c976fe2dda501acac7a47524a72202ac2b Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (pick): Added some dependencies
+d8b069c976fe2dda501acac7a47524a72202ac2b c4c05c5897485a7b6e003bd37e804f64923db94c Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (pick): Added sign-in, and set up DB so everything pulls from there instead of local storage after initial migration when user signs in
+c4c05c5897485a7b6e003bd37e804f64923db94c f35d6d1bbd0e7acb33b1ab044fd15a7958662ef1 Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (pick): Fixed the account switching glitch
+f35d6d1bbd0e7acb33b1ab044fd15a7958662ef1 9249a9140bfd8aba6b60063d5202075f034b84be Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (pick): Fixed vercel issues with prisma that were not allowing deployment
+9249a9140bfd8aba6b60063d5202075f034b84be 601cfef7ad961acdacb44a375251952deda41508 Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (pick): Added some more in depth Vercel adjustments to try to deploy
+601cfef7ad961acdacb44a375251952deda41508 601cfef7ad961acdacb44a375251952deda41508 Muneer Khan <mk@Muneers-Laptop.local> 1741989502 -0400	rebase (finish): returning to refs/heads/login-feature
+601cfef7ad961acdacb44a375251952deda41508 601cfef7ad961acdacb44a375251952deda41508 Muneer Khan <mk@Muneers-Laptop.local> 1742013647 -0400	reset: moving to 601cfef7ad961acdacb44a375251952deda41508
+601cfef7ad961acdacb44a375251952deda41508 f35d6d1bbd0e7acb33b1ab044fd15a7958662ef1 Muneer Khan <mk@Muneers-Laptop.local> 1742013763 -0400	checkout: moving from login-feature to f35d6d1bbd0e7acb33b1ab044fd15a7958662ef1
+f35d6d1bbd0e7acb33b1ab044fd15a7958662ef1 c4c05c5897485a7b6e003bd37e804f64923db94c Muneer Khan <mk@Muneers-Laptop.local> 1742013910 -0400	checkout: moving from f35d6d1bbd0e7acb33b1ab044fd15a7958662ef1 to c4c05c5897485a7b6e003bd37e804f64923db94c
+c4c05c5897485a7b6e003bd37e804f64923db94c a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db Muneer Khan <mk@Muneers-Laptop.local> 1742014055 -0400	checkout: moving from c4c05c5897485a7b6e003bd37e804f64923db94c to a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db
+a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1742015543 -0400	checkout: moving from a73fc3df0eb103b8e2b0dd822c2c1974ad42b4db to 294a6f01a66be3d083df712ff6cdc9afad33d7c6
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 b5374a5d5bb1451697aacf6770890f8714fbdc70 Muneer Khan <mk@Muneers-Laptop.local> 1742016927 -0400	commit: Added login
+b5374a5d5bb1451697aacf6770890f8714fbdc70 b5374a5d5bb1451697aacf6770890f8714fbdc70 Muneer Khan <mk@Muneers-Laptop.local> 1742016973 -0400	checkout: moving from b5374a5d5bb1451697aacf6770890f8714fbdc70 to login
+b5374a5d5bb1451697aacf6770890f8714fbdc70 2e5d0eb9096dc485bf37b1bb6f1ac8bad7c715ff Muneer Khan <mk@Muneers-Laptop.local> 1742017893 -0400	commit: Fixed review so ayahs come from the place user specified with settings
+2e5d0eb9096dc485bf37b1bb6f1ac8bad7c715ff 294feac233fb947395bcc00c63928c6f2aa1ab47 Muneer Khan <mk@Muneers-Laptop.local> 1742018076 -0400	commit: Fixed total reviewed ayahs showing up on dashboard
+294feac233fb947395bcc00c63928c6f2aa1ab47 623151e75f99d916bad601b1e4395d151e8aa585 Muneer Khan <mk@Muneers-Laptop.local> 1742018235 -0400	commit: Fixed issue with context showing up from previous surahs
+623151e75f99d916bad601b1e4395d151e8aa585 dc2b6017cd40453c16ed98e79730775d3e5d8457 Muneer Khan <mk@Muneers-Laptop.local> 1742019044 -0400	commit: Fixed dupe navbar and made sign in and sign out buttons more concise and clean on layout
+dc2b6017cd40453c16ed98e79730775d3e5d8457 cb0835d121ef697fe36cc91548fd3881fd858621 Muneer Khan <mk@Muneers-Laptop.local> 1742019823 -0400	commit: set heatmap to original UI but the tracking is not working for some reason, will fix another time
+cb0835d121ef697fe36cc91548fd3881fd858621 568e47872230c9d13bb8470a8156caa824a71906 Muneer Khan <mk@Muneers-Laptop.local> 1742020731 -0400	commit: Fixed freezing error that was happening on new user sign up
+568e47872230c9d13bb8470a8156caa824a71906 fba500bcf3c6acec0f1e785916e2d115b757f77f Muneer Khan <mk@Muneers-Laptop.local> 1742022598 -0400	commit: Added new logo and made it change with dark or light mode
+fba500bcf3c6acec0f1e785916e2d115b757f77f d35afeeca994cb5b623cc4f35f1fd82e4306703b Muneer Khan <mk@Muneers-Laptop.local> 1742023645 -0400	commit: Added background image for homepage for clean look, implemented smooth scroll for learn more button, changed the memorization to say review instead
+d35afeeca994cb5b623cc4f35f1fd82e4306703b b26e7f871a8b84b994c6b538f5c9f51e351ac999 Muneer Khan <mk@Muneers-Laptop.local> 1742062764 -0400	commit: Fixed file structure issue
+b26e7f871a8b84b994c6b538f5c9f51e351ac999 3574f9fb36610e078abdc8121968f64bd0078fc4 Muneer Khan <mk@Muneers-Laptop.local> 1742063499 -0400	commit: Fixed icon in metadata
+3574f9fb36610e078abdc8121968f64bd0078fc4 3574f9fb36610e078abdc8121968f64bd0078fc4 Muneer Khan <mk@Muneers-Laptop.local> 1742064053 -0400	checkout: moving from login to bug-fixes-page
+3574f9fb36610e078abdc8121968f64bd0078fc4 567c58ac085b55b92823897d9c9222c23a94aa86 Muneer Khan <mk@Muneers-Laptop.local> 1742072829 -0400	commit: Added bug fixes report page and updated schema so bug fixes go to the db and can be seen from there
+567c58ac085b55b92823897d9c9222c23a94aa86 ebef5ee93d21eabc8ff8c64b714b54e478f737bf Muneer Khan <mk@Muneers-Laptop.local> 1742076778 -0400	commit: test preview build
+ebef5ee93d21eabc8ff8c64b714b54e478f737bf e201b5a9e2a8206305df7dd1b19654266caad02c Muneer Khan <mk@Muneers-Laptop.local> 1742077309 -0400	commit: testing rds
+e201b5a9e2a8206305df7dd1b19654266caad02c fd2a72107b546351eb86fe54b5aefa2c0ffbef55 Muneer Khan <mk@Muneers-Laptop.local> 1742095445 -0400	commit: Ran RDS Test script
+fd2a72107b546351eb86fe54b5aefa2c0ffbef55 476f79161ba141cdab81135a86bba033b0a6010b Muneer Khan <mk@Muneers-Laptop.local> 1742095686 -0400	commit: More in depth prisma generation for Vercel
+476f79161ba141cdab81135a86bba033b0a6010b a692c3f921c86c06014a761b7c58824a25b6a8fe Muneer Khan <mk@Muneers-Laptop.local> 1742095767 -0400	commit: Added prisma as dependency for Vercel
+a692c3f921c86c06014a761b7c58824a25b6a8fe b2dd3f7d18cc11c8e0e5560d60ed9b53054373d4 Muneer Khan <mk@Muneers-Laptop.local> 1742097710 -0400	commit: Added some prisma changes to try to get RDS to work
+b2dd3f7d18cc11c8e0e5560d60ed9b53054373d4 c53e6048464341636e6c606f1a25ebbfd2ad9da8 Muneer Khan <mk@Muneers-Laptop.local> 1742098300 -0400	commit: Attempting to redeploy with new RDS
+c53e6048464341636e6c606f1a25ebbfd2ad9da8 3574f9fb36610e078abdc8121968f64bd0078fc4 Muneer Khan <mk@Muneers-Laptop.local> 1742099039 -0400	checkout: moving from bug-fixes-page to login
+3574f9fb36610e078abdc8121968f64bd0078fc4 a029ed145973862da72dad178bc8cc0bcce51898 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (start): checkout main
+a029ed145973862da72dad178bc8cc0bcce51898 1dcb3a2452bb8a2a869fb65ed6bd42d6485c2335 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Added login
+1dcb3a2452bb8a2a869fb65ed6bd42d6485c2335 ea611fa94ddce229bc2ac4a4462d27fb01aa63d3 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed review so ayahs come from the place user specified with settings
+ea611fa94ddce229bc2ac4a4462d27fb01aa63d3 9bd732d118d4f4e19e0c5fc149d90f3b98d7c0db Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed total reviewed ayahs showing up on dashboard
+9bd732d118d4f4e19e0c5fc149d90f3b98d7c0db 6b44d3d91e3a71e2022c41e5eb904353901c6a64 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed issue with context showing up from previous surahs
+6b44d3d91e3a71e2022c41e5eb904353901c6a64 b3c860e332d9d2db698d46dd6170399a7b9330ec Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed dupe navbar and made sign in and sign out buttons more concise and clean on layout
+b3c860e332d9d2db698d46dd6170399a7b9330ec 31c62b07a95840500fba8f86e6ad20ac37e563b5 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): set heatmap to original UI but the tracking is not working for some reason, will fix another time
+31c62b07a95840500fba8f86e6ad20ac37e563b5 6831c636436179b9e951789dee1e76d81a35bddc Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed freezing error that was happening on new user sign up
+6831c636436179b9e951789dee1e76d81a35bddc 0662e3fb8b904d50f80738824f21c60e2d89ec24 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Added new logo and made it change with dark or light mode
+0662e3fb8b904d50f80738824f21c60e2d89ec24 2dd6ee039252866462bf2ea44e036a206adc9188 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Added background image for homepage for clean look, implemented smooth scroll for learn more button, changed the memorization to say review instead
+2dd6ee039252866462bf2ea44e036a206adc9188 105f91bd2ac5f4afdd46f625d6efd93a1ba85a77 Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed file structure issue
+105f91bd2ac5f4afdd46f625d6efd93a1ba85a77 67b524f2ed9361cc0bdd39d63b49f23186399c6a Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (pick): Fixed icon in metadata
+67b524f2ed9361cc0bdd39d63b49f23186399c6a 67b524f2ed9361cc0bdd39d63b49f23186399c6a Muneer Khan <mk@Muneers-Laptop.local> 1742099050 -0400	rebase (finish): returning to refs/heads/login
+67b524f2ed9361cc0bdd39d63b49f23186399c6a a029ed145973862da72dad178bc8cc0bcce51898 Muneer Khan <mk@Muneers-Laptop.local> 1742099169 -0400	checkout: moving from login to main
+a029ed145973862da72dad178bc8cc0bcce51898 060c041b785df96eb768a491b161bed46f660c27 Muneer Khan <mk@Muneers-Laptop.local> 1742099183 -0400	pull origin main: Fast-forward
+060c041b785df96eb768a491b161bed46f660c27 2ec2516730308db5bf57112ec369f96ce1eafded Muneer Khan <mk@Muneers-Laptop.local> 1742099498 -0400	commit: Removed unnecessary console logs for production build and fixed metadata icon
+2ec2516730308db5bf57112ec369f96ce1eafded 2ec2516730308db5bf57112ec369f96ce1eafded Muneer Khan <mk@Muneers-Laptop.local> 1742099731 -0400	checkout: moving from main to console-and-ayah-loading
+2ec2516730308db5bf57112ec369f96ce1eafded 2a6f079231bafb337877deef62d284b5e19b4e6f Muneer Khan <mk@Muneers-Laptop.local> 1742100070 -0400	commit: Fixed extra console logs
+2a6f079231bafb337877deef62d284b5e19b4e6f 2ec2516730308db5bf57112ec369f96ce1eafded Muneer Khan <mk@Muneers-Laptop.local> 1742100364 -0400	checkout: moving from console-and-ayah-loading to main
+2ec2516730308db5bf57112ec369f96ce1eafded 9c83c190251ffd762723d69f7f60d394c0b1d7b5 Muneer Khan <mk@Muneers-Laptop.local> 1742100370 -0400	pull origin main: Fast-forward
+9c83c190251ffd762723d69f7f60d394c0b1d7b5 9c83c190251ffd762723d69f7f60d394c0b1d7b5 Muneer Khan <mk@Muneers-Laptop.local> 1742100392 -0400	checkout: moving from main to heatmap-fix
+9c83c190251ffd762723d69f7f60d394c0b1d7b5 294a6f01a66be3d083df712ff6cdc9afad33d7c6 Muneer Khan <mk@Muneers-Laptop.local> 1742100938 -0400	checkout: moving from heatmap-fix to 294a6f01a66be3d083df712ff6cdc9afad33d7c6
+294a6f01a66be3d083df712ff6cdc9afad33d7c6 9c83c190251ffd762723d69f7f60d394c0b1d7b5 Muneer Khan <mk@Muneers-Laptop.local> 1742101004 -0400	checkout: moving from 294a6f01a66be3d083df712ff6cdc9afad33d7c6 to heatmap-fix
+9c83c190251ffd762723d69f7f60d394c0b1d7b5 4655b2b4056df2eac60414842847f4b5ff264462 Muneer Khan <mk@Muneers-Laptop.local> 1742104279 -0400	commit: Testing out a stacked bar chart instead of heatmap, didn't finish proper implementation though
+4655b2b4056df2eac60414842847f4b5ff264462 9c83c190251ffd762723d69f7f60d394c0b1d7b5 Muneer Khan <mk@Muneers-Laptop.local> 1742165100 -0400	checkout: moving from heatmap-fix to main
+9c83c190251ffd762723d69f7f60d394c0b1d7b5 0c1208fafecdc64777c676f9f16d2ac9cab1b2c3 Muneer Khan <mk@Muneers-Laptop.local> 1742165124 -0400	commit: Fixed issue with signout going to invalid URL
+0c1208fafecdc64777c676f9f16d2ac9cab1b2c3 6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 Muneer Khan <mk@Muneers-Laptop.local> 1742165256 -0400	commit: Tried another fix
+6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 Muneer Khan <mk@Muneers-Laptop.local> 1742226722 -0400	checkout: moving from main to fast-ayah-load
+6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 c74b339cfa8b0e656e453e09acc475be7204c7c9 Muneer Khan <mk@Muneers-Laptop.local> 1742227598 -0400	commit: Fixed issue with ayahs loading slow or preloading default settings before user settings
+c74b339cfa8b0e656e453e09acc475be7204c7c9 0d02a184d183fe44a71d3b9e2f7ab6ad74c2a35f Muneer Khan <mk@Muneers-Laptop.local> 1742228003 -0400	commit: Fixed issue with wrong context ayahs showing up sometimes on new account creation
+0d02a184d183fe44a71d3b9e2f7ab6ad74c2a35f 6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 Muneer Khan <mk@Muneers-Laptop.local> 1742228438 -0400	checkout: moving from fast-ayah-load to main
+6d6fc8e1985f85a8e605685298b2ebcdcb61a4d8 78527d30c01adae2ff2ca369b6f1292aba0926cf Muneer Khan <mk@Muneers-Laptop.local> 1742228441 -0400	pull origin main: Fast-forward
+78527d30c01adae2ff2ca369b6f1292aba0926cf 84617f030ea96757c549926c43265d09a327f4dc Muneer Khan <mk@Muneers-Laptop.local> 1742233203 -0400	commit: Added web analytics
