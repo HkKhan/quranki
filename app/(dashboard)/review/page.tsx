@@ -222,7 +222,14 @@ export default function ReviewPage() {
       // Only fetch previous ayahs if we're not at the start of a surah
       if (currentAyah.ayah_no_surah > 1) {
         const prevResponse = await fetch(
-          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`
+          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`,
+          {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
         const prevData = await prevResponse.json();
         
@@ -248,7 +255,14 @@ export default function ReviewPage() {
       
       // First check if we need to respect surah boundaries
       const surahCountResponse = await fetch(
-        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`
+        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`,
+        {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }
       );
       const surahCountData = await surahCountResponse.json();
       
@@ -265,7 +279,14 @@ export default function ReviewPage() {
         }
         
         const response = await fetch(
-          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`
+          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`,
+          {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
         const data = await response.json();
 
