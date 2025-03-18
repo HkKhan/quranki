@@ -1,5 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookOpen, Calendar, Flame, BarChart2 } from "lucide-react";
+import {
+  BookOpen,
+  Calendar,
+  Flame,
+  BarChart2,
+  Plus,
+  History,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StatsCardsProps {
@@ -7,7 +14,11 @@ interface StatsCardsProps {
   reviewedToday: number;
   streak: number;
   totalReviewed: number;
-  dailyAverage?: number; // Make it optional to maintain backward compatibility
+  dailyAverage?: number;
+  newAyahsDue: number;
+  newAyahsReviewed: number;
+  reviewAyahsDue: number;
+  reviewAyahsReviewed: number;
 }
 
 export function StatsCards({
@@ -15,14 +26,28 @@ export function StatsCards({
   reviewedToday,
   streak,
   totalReviewed,
-  dailyAverage = 0, // Default to 0 if not provided
+  dailyAverage = 0,
+  newAyahsDue,
+  newAyahsReviewed,
+  reviewAyahsDue,
+  reviewAyahsReviewed,
 }: StatsCardsProps) {
   // Format daily average to 1 decimal place
   const formattedAverage = dailyAverage.toFixed(1);
 
-  // Calculate percentage for progress bar, avoiding division by zero
-  const progressPercent =
-    dueToday > 0 ? Math.min(100, (reviewedToday / dueToday) * 100) : 0;
+  // Calculate percentage for progress bars, avoiding division by zero
+  const newAyahsProgressPercent =
+    newAyahsDue > 0 ? Math.min(100, (newAyahsReviewed / newAyahsDue) * 100) : 0;
+
+  const reviewAyahsProgressPercent =
+    reviewAyahsDue > 0
+      ? Math.min(100, (reviewAyahsReviewed / reviewAyahsDue) * 100)
+      : 0;
+
+  // Check if all reviews are complete
+  const allComplete =
+    (newAyahsDue === 0 || newAyahsReviewed === newAyahsDue) &&
+    (reviewAyahsDue === 0 || reviewAyahsReviewed === reviewAyahsDue);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -33,17 +58,52 @@ export function StatsCards({
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{dueToday}</div>
-          <p className="text-xs text-muted-foreground">
-            {reviewedToday} of {dueToday} reviewed
+          <p className="text-xs text-muted-foreground mb-3">
+            {reviewedToday} of {dueToday} total ayahs reviewed
           </p>
-          <div className="mt-3 h-2 w-full rounded-full bg-muted">
-            <div
-              className="h-2 rounded-full bg-primary transition-all duration-700 ease-in-out"
-              style={{ width: `${progressPercent}%` }}
-            />
+
+          <div className="space-y-3">
+            {/* New Ayahs Section */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center">
+                  <Plus className="h-3 w-3 text-blue-500 mr-1" />
+                  <span className="text-xs font-medium">New Ayahs</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {newAyahsReviewed} of {newAyahsDue}
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted">
+                <div
+                  className="h-1.5 rounded-full bg-blue-500 transition-all duration-700 ease-in-out"
+                  style={{ width: `${newAyahsProgressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Review Ayahs Section */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center">
+                  <History className="h-3 w-3 text-amber-500 mr-1" />
+                  <span className="text-xs font-medium">Review Ayahs</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {reviewAyahsReviewed} of {reviewAyahsDue}
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted">
+                <div
+                  className="h-1.5 rounded-full bg-amber-500 transition-all duration-700 ease-in-out"
+                  style={{ width: `${reviewAyahsProgressPercent}%` }}
+                />
+              </div>
+            </div>
           </div>
-          {progressPercent === 100 && (
-            <p className="text-xs text-green-600 mt-1 font-medium">
+
+          {allComplete && (
+            <p className="text-xs text-green-600 mt-3 font-medium">
               All reviews complete! ✓
             </p>
           )}
