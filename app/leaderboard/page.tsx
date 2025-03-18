@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Flame, Trophy, Award, Crown, Medal } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Trophy, Award, Crown, Medal, Construction, Clock, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/badge-custom";
 import { useTheme } from "next-themes";
 import Image from "next/image";
@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
 interface LeaderboardEntry {
   name: string;
   totalAyahs: number;
-  longestStreak: number;
+  currentStreak: number;
+  positionChange: number;
 }
 
 interface LeaderboardResponse {
@@ -41,12 +42,13 @@ export default function LeaderboardPage() {
   const [totalPages, setTotalPages] = useState(1);
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState("global");
+  const [sortBy, setSortBy] = useState<"currentStreak" | "totalAyahs">("currentStreak");
 
-  const fetchLeaderboard = async (page: number, itemsPerPage: number) => {
+  const fetchLeaderboard = async (page: number, itemsPerPage: number, sortOption: string) => {
     try {
       setLoading(true);
       const response = await fetch(
-        `/api/leaderboard?page=${page}&perPage=${itemsPerPage}`
+        `/api/leaderboard?page=${page}&perPage=${itemsPerPage}&sortBy=${sortOption}`
       );
       const data: LeaderboardResponse = await response.json();
       setLeaderboard(data.data);
@@ -60,8 +62,8 @@ export default function LeaderboardPage() {
   };
 
   useEffect(() => {
-    fetchLeaderboard(currentPage, perPage);
-  }, [currentPage, perPage]);
+    fetchLeaderboard(currentPage, perPage, sortBy);
+  }, [currentPage, perPage, sortBy]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -74,6 +76,11 @@ export default function LeaderboardPage() {
     setCurrentPage(1); // Reset to first page when changing items per page
   };
   
+  const handleSortChange = (value: string) => {
+    setSortBy(value as "currentStreak" | "totalAyahs");
+    setCurrentPage(1); // Reset to first page when changing sort option
+  };
+
   // Function to choose the trophy color based on rank
   const getTrophyColor = (rank: number): string => {
     if (rank === 1) return "text-yellow-500"; // Gold
@@ -88,6 +95,31 @@ export default function LeaderboardPage() {
     if (rank === 2) return <Medal className="h-5 w-5 text-slate-400" />;
     if (rank === 3) return <Medal className="h-5 w-5 text-amber-600" />;
     return null;
+  };
+
+  // Get position change icon and styling
+  const getPositionChangeIndicator = (change: number) => {
+    if (change > 0) {
+      return (
+        <div className="flex items-center text-green-500">
+          <ArrowUp className="h-3.5 w-3.5 mr-0.5" />
+          <span className="text-xs font-medium">{change}</span>
+        </div>
+      );
+    } else if (change < 0) {
+      return (
+        <div className="flex items-center text-red-500">
+          <ArrowDown className="h-3.5 w-3.5 mr-0.5" />
+          <span className="text-xs font-medium">{Math.abs(change)}</span>
+        </div>
+      );
+    } else {
+      return (
+        <div className="flex items-center text-gray-400">
+          <Minus className="h-3.5 w-3.5" />
+        </div>
+      );
+    }
   };
 
   // Image path based on theme - flipped from previous implementation
@@ -105,6 +137,216 @@ export default function LeaderboardPage() {
   const colors = getThemeColors();
   const isDarkMode = theme === 'dark';
 
+  // Render content based on active tab
+  const renderTabContent = () => {
+    if (activeTab === 'friends') {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-full p-6 mb-6">
+            <Clock className="h-12 w-12 text-slate-500 dark:text-slate-400" />
+          </div>
+          <h3 className="text-2xl font-bold mb-3 text-center">Friends Leaderboard Coming Soon!</h3>
+          <p className="text-slate-600 dark:text-slate-400 text-center max-w-md mb-4">
+            We're working on bringing you the ability to compete with your friends.
+            Stay tuned for updates!
+          </p>
+          <Button 
+            variant="outline" 
+            onClick={() => setActiveTab('global')}
+            className="mt-2"
+          >
+            Return to Global Leaderboard
+          </Button>
+        </div>
+      );
+    }
+
+    // Default to global tab content
+    return (
+      <>
+        <div className="space-y-3 mt-2">
+          {leaderboard.map((entry, index) => {
+            const rank = (currentPage - 1) * perPage + index + 1;
+            const isTopThree = rank <= 3;
+            
+            return (
+              <div 
+                key={index}
+                className={`
+                  relative flex items-center rounded-lg px-4 py-3.5
+                  ${isTopThree 
+                    ? 'bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-700 border-2'
+                    : 'bg-white dark:bg-slate-800 border'}
+                  border-slate-200 dark:border-slate-700
+                  shadow-sm transition-all hover:shadow hover:bg-opacity-90
+                `}
+                style={{
+                  borderColor: isTopThree ? colors.primary : '',
+                  borderLeftWidth: isTopThree ? '4px' : '1px'
+                }}
+              >
+                {/* Rank number - styled differently for top 3 */}
+                {isTopThree ? (
+                  <div className={`
+                    flex h-10 w-10 shrink-0 items-center justify-center rounded-lg mr-3 shadow-md
+                    ${rank === 1 ? 'bg-gradient-to-br from-yellow-300 to-yellow-600 text-yellow-950' :
+                      rank === 2 ? 'bg-gradient-to-br from-slate-300 to-slate-500 text-slate-950' :
+                      'bg-gradient-to-br from-amber-400 to-amber-700 text-amber-950'}
+                  `}>
+                    <span className="text-lg font-bold">{rank}</span>
+                  </div>
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center mr-3">
+                    <span className="text-lg font-semibold" style={{ color: colors.primary }}>
+                      {rank}.
+                    </span>
+                  </div>
+                )}
+                
+                {/* Name with rank icon for top 3 and position change */}
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center">
+                    <div className="text-lg font-semibold truncate">
+                      {entry.name}
+                    </div>
+                    {getRankIcon(rank)}
+                    <div className="ml-2">
+                      {getPositionChangeIndicator(entry.positionChange)}
+                    </div>
+                  </div>
+                  
+                  {/* Mobile view streak indicator */}
+                  <div className="md:hidden mt-1 flex items-center">
+                    <div className="mr-2 flex items-center gap-1 px-3 py-1 rounded-full overflow-hidden"
+                      style={{ 
+                        backgroundColor: colors.primary,
+                        fontWeight: "bold",
+                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)"
+                      }}>
+                      <span style={{ color: colors.secondary }}>{entry.currentStreak}</span>
+                      <Flame className="h-3.5 w-3.5" style={{ color: colors.secondary }} />
+                    </div>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      Ayahs: {entry.totalAyahs}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Stats Section - Desktop */}
+                <div className="hidden md:flex items-center space-x-4 ml-auto">
+                  {/* Streak Badge */}
+                  <div className="flex flex-col items-end">
+                    <div className={`text-xs mb-1 font-bold uppercase ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                      Streak
+                    </div>
+                    <div className="flex items-center gap-1 px-4 py-1.5 rounded-full" 
+                      style={{ 
+                        backgroundColor: colors.primary,
+                        fontWeight: "bold",
+                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)"
+                      }}>
+                      <span style={{ color: colors.secondary }}>{entry.currentStreak}</span>
+                      <Flame className="h-3.5 w-3.5" style={{ color: colors.secondary }} />
+                    </div>
+                  </div>
+                  
+                  {/* Total Ayahs with Trophy */}
+                  <div className="flex flex-col items-end min-w-[100px]">
+                    <div className={`text-xs mb-1 font-bold uppercase ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                      Total Ayahs
+                    </div>
+                    <div className="flex items-center">
+                      <span className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                        {entry.totalAyahs}
+                      </span>
+                      <Trophy 
+                        className={`h-5 w-5 ml-1.5 ${getTrophyColor(rank)}`} 
+                        fill={isTopThree ? "currentColor" : "none"}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Pagination and Sort Controls */}
+        <div className="mt-8 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between px-2">
+          {/* Sort Options - Mobile (visible only on mobile) */}
+          <div className="md:hidden w-full">
+            <Select
+              value={sortBy}
+              onValueChange={handleSortChange}
+            >
+              <SelectTrigger className="w-full border-slate-300 dark:border-slate-600">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="currentStreak">
+                  <div className="flex items-center">
+                    <Flame className="mr-2 h-4 w-4 text-amber-500" />
+                    Sort by Streak
+                  </div>
+                </SelectItem>
+                <SelectItem value="totalAyahs">
+                  <div className="flex items-center">
+                    <Trophy className="mr-2 h-4 w-4 text-yellow-500" />
+                    Sort by Total Ayahs
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Per Page Selector and Page Counter */}
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4">
+            <Select
+              value={perPage.toString()}
+              onValueChange={handlePerPageChange}
+            >
+              <SelectTrigger className="w-full md:w-[180px] border-slate-300 dark:border-slate-600">
+                <SelectValue placeholder="Select rows per page" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 per page</SelectItem>
+                <SelectItem value="25">25 per page</SelectItem>
+                <SelectItem value="50">50 per page</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </div>
+          </div>
+
+          <div className="flex justify-between md:justify-start items-center">
+            {/* Pagination Buttons */}
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="border-slate-300 dark:border-slate-600"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="border-slate-300 dark:border-slate-600"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="container py-6 max-w-4xl mx-auto">
       <Card className="shadow-lg border-2 border-slate-200 dark:border-slate-700 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl overflow-hidden">
@@ -112,8 +354,12 @@ export default function LeaderboardPage() {
           style={{
             background: `linear-gradient(to right, ${colors.primary}20, ${colors.secondary}20)`,
           }}>
-          <div className="flex justify-center mb-4">
-            <div className="relative h-10 w-56">
+          <div className="flex justify-between items-center mb-4">
+            {/* Empty div to balance the layout (hidden on mobile) */}
+            <div className="hidden md:block w-[180px]"></div>
+            
+            {/* Centered Leaderboard PNG */}
+            <div className="relative h-10 w-56 flex-shrink-0 mx-auto md:mx-0">
               <Image 
                 src={getLeaderboardImagePath()} 
                 alt="QuranKi Leaderboard" 
@@ -126,6 +372,32 @@ export default function LeaderboardPage() {
                   transform: "translateY(-5px) scale(0.9)",
                 }}
               />
+            </div>
+            
+            {/* Sort selector (hidden on mobile) */}
+            <div className="hidden md:block w-[180px]">
+              <Select
+                value={sortBy}
+                onValueChange={handleSortChange}
+              >
+                <SelectTrigger className="w-[180px] border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="currentStreak">
+                    <div className="flex items-center">
+                      <Flame className="mr-2 h-4 w-4 text-amber-500" />
+                      Sort by Streak
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="totalAyahs">
+                    <div className="flex items-center">
+                      <Trophy className="mr-2 h-4 w-4 text-yellow-500" />
+                      Sort by Total Ayahs
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           
@@ -155,148 +427,12 @@ export default function LeaderboardPage() {
               <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
             </div>
           ) : (
-            <>
-              <div className="space-y-3 mt-2">
-                {leaderboard.map((entry, index) => {
-                  const rank = (currentPage - 1) * perPage + index + 1;
-                  const isTopThree = rank <= 3;
-                  
-                  return (
-                    <div 
-                      key={index}
-                      className={`
-                        relative flex items-center rounded-lg px-4 py-3.5
-                        ${isTopThree 
-                          ? 'bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-700 border-2'
-                          : 'bg-white dark:bg-slate-800 border'}
-                        border-slate-200 dark:border-slate-700
-                        shadow-sm transition-all hover:shadow hover:bg-opacity-90
-                      `}
-                      style={{
-                        borderColor: isTopThree ? colors.primary : '',
-                        borderLeftWidth: isTopThree ? '4px' : '1px'
-                      }}
-                    >
-                      {/* Rank number - styled differently for top 3 */}
-                      {isTopThree ? (
-                        <div className={`
-                          flex h-10 w-10 shrink-0 items-center justify-center rounded-lg mr-3 shadow-md
-                          ${rank === 1 ? 'bg-gradient-to-br from-yellow-300 to-yellow-600 text-yellow-950' :
-                            rank === 2 ? 'bg-gradient-to-br from-slate-300 to-slate-500 text-slate-950' :
-                            'bg-gradient-to-br from-amber-400 to-amber-700 text-amber-950'}
-                        `}>
-                          <span className="text-lg font-bold">{rank}</span>
-                        </div>
-                      ) : (
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center mr-3">
-                          <span className="text-lg font-semibold" style={{ color: colors.primary }}>
-                            {rank}.
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* Name with rank icon for top 3 */}
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="flex items-center">
-                          <div className="text-lg font-semibold truncate">
-                            {entry.name}
-                          </div>
-                          {getRankIcon(rank)}
-                        </div>
-                        
-                        {/* Mobile view streak indicator */}
-                        <div className="md:hidden mt-1 flex items-center">
-                          <div className="streak-badge mr-2">
-                            <span>{entry.longestStreak}</span>
-                            <Flame className="h-3.5 w-3.5 ml-1" />
-                          </div>
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            Ayahs: {entry.totalAyahs}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {/* Stats Section - Desktop */}
-                      <div className="hidden md:flex items-center space-x-4 ml-auto">
-                        {/* Streak Badge */}
-                        <div className="flex flex-col items-end">
-                          <div className={`text-xs mb-1 font-bold uppercase ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                            Longest Streak
-                          </div>
-                          <div className="streak-badge">
-                            <span>{entry.longestStreak}</span>
-                            <Flame className="h-3.5 w-3.5 ml-1" />
-                          </div>
-                        </div>
-                        
-                        {/* Total Ayahs with Trophy */}
-                        <div className="flex flex-col items-end min-w-[100px]">
-                          <div className={`text-xs mb-1 font-bold uppercase ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                            Total Ayahs
-                          </div>
-                          <div className="flex items-center">
-                            <span className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                              {entry.totalAyahs}
-                            </span>
-                            <Trophy 
-                              className={`h-5 w-5 ml-1.5 ${getTrophyColor(rank)}`} 
-                              fill={isTopThree ? "currentColor" : "none"}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              {/* Pagination Controls */}
-              <div className="mt-8 flex items-center justify-between px-2">
-                <div className="flex items-center gap-4">
-                  <Select
-                    value={perPage.toString()}
-                    onValueChange={handlePerPageChange}
-                  >
-                    <SelectTrigger className="w-[180px] border-slate-300 dark:border-slate-600">
-                      <SelectValue placeholder="Select rows per page" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10 per page</SelectItem>
-                      <SelectItem value="25">25 per page</SelectItem>
-                      <SelectItem value="50">50 per page</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="border-slate-300 dark:border-slate-600"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="border-slate-300 dark:border-slate-600"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
+            renderTabContent()
           )}
         </CardContent>
       </Card>
 
-      {/* Custom CSS for tabs and streak badge */}
+      {/* Custom CSS for tabs */}
       <style jsx>{`
         .custom-tabs-container {
           width: 100%;
@@ -332,21 +468,6 @@ export default function LeaderboardPage() {
           background-color: white;
           color: #1877f2;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .streak-badge {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: ${theme === 'dark' 
-            ? 'linear-gradient(to right, #48498e, #dabd74)' 
-            : 'linear-gradient(to right, #fdd3b6, #767778)'};
-          color: white;
-          font-weight: bold;
-          padding: 4px 10px;
-          border-radius: 9999px;
-          font-size: 0.875rem;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
         /* Dark mode styles */
