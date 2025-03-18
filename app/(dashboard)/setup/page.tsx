@@ -43,23 +43,26 @@ export default function SetupPage() {
   const [selectedSurahs, setSelectedSurahs] = useState<number[]>([]);
   const [ayahsAfter, setAyahsAfter] = useState(2);
   const [promptsPerSession, setPromptsPerSession] = useState(20);
+  const [newAyahsPerDay, setNewAyahsPerDay] = useState(5);
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectionType, setSelectionType] = useState<"juzaa" | "surah">("juzaa");
+  const [selectionType, setSelectionType] = useState<"juzaa" | "surah">(
+    "juzaa"
+  );
   const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session?.user?.id) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
     // Load existing settings from the database
     const loadSettings = async () => {
       try {
-        const response = await fetch('/api/settings');
+        const response = await fetch("/api/settings");
         const data = await response.json();
 
         if (data.settings) {
@@ -67,17 +70,19 @@ export default function SetupPage() {
           setSelectedSurahs(data.settings.selectedSurahs || []);
           setAyahsAfter(data.settings.ayahsAfter || 2);
           setPromptsPerSession(data.settings.promptsPerSession || 20);
+          setNewAyahsPerDay(data.settings.newAyahsPerDay || 5);
           setSelectionType(data.settings.selectionType || "juzaa");
         }
       } catch (error) {
-        console.error('Error loading settings:', error);
-        setError('Failed to load settings');
+        console.error("Error loading settings:", error);
+        setError("Failed to load settings");
       }
     };
 
     // Load all surahs and settings
-    Promise.all([loadSurahs(), loadSettings(), verifyQuranData()])
-      .finally(() => setIsLoading(false));
+    Promise.all([loadSurahs(), loadSettings(), verifyQuranData()]).finally(() =>
+      setIsLoading(false)
+    );
   }, [session, router]);
 
   const loadSurahs = async () => {
@@ -90,7 +95,7 @@ export default function SetupPage() {
       }
     } catch (error) {
       console.error("Error loading surahs:", error);
-      setError('Failed to load surahs');
+      setError("Failed to load surahs");
     }
   };
 
@@ -102,11 +107,11 @@ export default function SetupPage() {
 
       if (!data.success) {
         console.error("Error verifying Quran data:", data.error);
-        setError('Failed to verify Quran data');
+        setError("Failed to verify Quran data");
       }
     } catch (error) {
       console.error("Error verifying Quran data:", error);
-      setError('Failed to verify Quran data');
+      setError("Failed to verify Quran data");
     } finally {
       setIsVerifying(false);
     }
@@ -154,19 +159,19 @@ export default function SetupPage() {
   };
 
   const handleSelectAllSurahs = (surahs: SurahInfo[]) => {
-    const surahNumbers = surahs.map(s => s.surah_no);
-    
+    const surahNumbers = surahs.map((s) => s.surah_no);
+
     // If all in range are already selected, deselect all
-    const allSelected = surahNumbers.every(no => selectedSurahs.includes(no));
+    const allSelected = surahNumbers.every((no) => selectedSurahs.includes(no));
 
     if (allSelected) {
       setSelectedSurahs(
-        selectedSurahs.filter(no => !surahNumbers.includes(no))
+        selectedSurahs.filter((no) => !surahNumbers.includes(no))
       );
     } else {
       // Add all surahs that aren't already selected
       const newSelected = [...selectedSurahs];
-      surahNumbers.forEach(no => {
+      surahNumbers.forEach((no) => {
         if (!newSelected.includes(no)) {
           newSelected.push(no);
         }
@@ -176,8 +181,10 @@ export default function SetupPage() {
   };
 
   const handleSave = async () => {
-    if ((selectionType === "juzaa" && selectedJuzaa.length === 0) || 
-        (selectionType === "surah" && selectedSurahs.length === 0)) {
+    if (
+      (selectionType === "juzaa" && selectedJuzaa.length === 0) ||
+      (selectionType === "surah" && selectedSurahs.length === 0)
+    ) {
       setError("Please select at least one juzaa or surah");
       return;
     }
@@ -187,20 +194,21 @@ export default function SetupPage() {
 
     try {
       // Save settings to database
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           selectedJuzaa,
           selectedSurahs,
           selectionType,
           ayahsAfter,
           promptsPerSession,
+          newAyahsPerDay,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save settings');
+        throw new Error("Failed to save settings");
       }
 
       // Verify that we can load ayahs from the selected items
@@ -214,18 +222,20 @@ export default function SetupPage() {
           `/api/quran?action=surah&surah=${selectedSurahs.join(",")}`
         );
       }
-      
+
       const data = await verifyResponse.json();
 
       if (!data.success || !data.ayahs || data.ayahs.length === 0) {
-        throw new Error('No ayahs found for the selected content');
+        throw new Error("No ayahs found for the selected content");
       }
 
       // Navigate to dashboard on success
       router.push("/dashboard");
     } catch (error) {
       console.error("Error saving settings:", error);
-      setError(error instanceof Error ? error.message : 'Failed to save settings');
+      setError(
+        error instanceof Error ? error.message : "Failed to save settings"
+      );
     } finally {
       setIsSaving(false);
     }
@@ -259,8 +269,8 @@ export default function SetupPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <Tabs 
-              value={selectionType} 
+            <Tabs
+              value={selectionType}
               onValueChange={(v) => setSelectionType(v as "juzaa" | "surah")}
               className="w-full"
             >
@@ -279,7 +289,9 @@ export default function SetupPage() {
                     size="sm"
                     onClick={() => handleSelectAllJuzaa(1, 30)}
                   >
-                    {selectedJuzaa.length === 30 ? "Deselect All" : "Select All"}
+                    {selectedJuzaa.length === 30
+                      ? "Deselect All"
+                      : "Select All"}
                   </Button>
                 </div>
 
@@ -301,7 +313,7 @@ export default function SetupPage() {
                     </div>
                   ))}
                 </div>
-                
+
                 {selectedJuzaa.length === 0 && (
                   <div className="flex items-center p-4 border border-yellow-200 bg-yellow-50 text-yellow-800 rounded-md dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
                     <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
@@ -322,13 +334,18 @@ export default function SetupPage() {
                     size="sm"
                     onClick={() => handleSelectAllSurahs(allSurahs)}
                   >
-                    {selectedSurahs.length === allSurahs.length ? "Deselect All" : "Select All"}
+                    {selectedSurahs.length === allSurahs.length
+                      ? "Deselect All"
+                      : "Select All"}
                   </Button>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
                   {allSurahs.map((surah) => (
-                    <div key={surah.surah_no} className="flex items-center space-x-2">
+                    <div
+                      key={surah.surah_no}
+                      className="flex items-center space-x-2"
+                    >
                       <Checkbox
                         id={`surah-${surah.surah_no}`}
                         checked={selectedSurahs.includes(surah.surah_no)}
@@ -344,7 +361,7 @@ export default function SetupPage() {
                     </div>
                   ))}
                 </div>
-                
+
                 {selectedSurahs.length === 0 && (
                   <div className="flex items-center p-4 border border-yellow-200 bg-yellow-50 text-yellow-800 rounded-md dark:border-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
                     <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
@@ -403,7 +420,10 @@ export default function SetupPage() {
 
               <div>
                 <div className="flex justify-between mb-2">
-                  <Label htmlFor="prompts-per-session" className="text-sm font-medium">
+                  <Label
+                    htmlFor="prompts-per-session"
+                    className="text-sm font-medium"
+                  >
                     Prompts Per Session
                   </Label>
                   <span>{promptsPerSession}</span>
@@ -426,7 +446,43 @@ export default function SetupPage() {
                   <span>50</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Number of review prompts to include in each review session (1-50 ayahs).
+                  Number of review prompts to include in each review session
+                  (1-50 ayahs).
+                </p>
+              </div>
+
+              <Separator className="my-4" />
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <Label
+                    htmlFor="new-ayahs-per-day"
+                    className="text-sm font-medium"
+                  >
+                    New Ayahs Per Day
+                  </Label>
+                  <span>{newAyahsPerDay}</span>
+                </div>
+                <Slider
+                  id="new-ayahs-per-day"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={[newAyahsPerDay]}
+                  onValueChange={(value) => setNewAyahsPerDay(value[0])}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>0</span>
+                  <span>5</span>
+                  <span>10</span>
+                  <span>15</span>
+                  <span>20</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Number of new ayahs to review each day from your selected
+                  content. These will be added to your daily review queue along
+                  with any ayahs that are due for review.
                 </p>
               </div>
             </div>
@@ -436,9 +492,11 @@ export default function SetupPage() {
         <div className="flex justify-end">
           <Button
             onClick={handleSave}
-            disabled={(selectionType === "juzaa" && selectedJuzaa.length === 0) || 
-                     (selectionType === "surah" && selectedSurahs.length === 0) || 
-                     isSaving}
+            disabled={
+              (selectionType === "juzaa" && selectedJuzaa.length === 0) ||
+              (selectionType === "surah" && selectedSurahs.length === 0) ||
+              isSaving
+            }
             className="flex items-center"
           >
             {isSaving ? (
