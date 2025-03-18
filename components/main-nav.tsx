@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { BookOpen, Moon, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
-import { signOut, useSession } from 'next-auth/react';
+import { signOut, useSession } from "next-auth/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,7 @@ export function MainNav() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const { data: session, status } = useSession();
-  const isLoading = status === 'loading';
+  const isLoading = status === "loading";
 
   // After hydration, we can safely show the UI that depends on the theme
   React.useEffect(() => {
@@ -46,6 +46,11 @@ export function MainNav() {
       active: pathname === "/review",
     },
     {
+      href: "/leaderboard",
+      label: "Leaderboard",
+      active: pathname === "/leaderboard",
+    },
+    {
       href: "/setup",
       label: "Setup",
       active: pathname === "/setup",
@@ -62,21 +67,25 @@ export function MainNav() {
       <div className="container flex h-14 items-center">
         <div className="flex items-center mr-4">
           <Link href="/" className="flex items-center">
-            <div className={cn(
-              "relative p-1 transition-all duration-300 rounded-lg",
-              theme === "dark" 
-                ? "hover:bg-gold-900/10 hover:shadow-[0_0_15px_rgba(255,215,0,0.3)]" 
-                : "hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)]"
-            )}>
+            <div
+              className={cn(
+                "relative p-1 transition-all duration-300 rounded-lg",
+                theme === "dark"
+                  ? "hover:bg-gold-900/10 hover:shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+                  : "hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)]"
+              )}
+            >
               <Image
-                src={theme === "dark" ? "/qurankilogo.png" : "/qurankilight.png"}
+                src={
+                  theme === "dark" ? "/qurankilogo.png" : "/qurankilight.png"
+                }
                 alt="QuranKi Logo"
                 width={120}
                 height={36}
                 className={cn(
                   "h-9 w-[120px] transition-all duration-300 rounded-lg",
-                  theme === "dark" 
-                    ? "shadow-[0_0_10px_rgba(255,215,0,0.2)]" 
+                  theme === "dark"
+                    ? "shadow-[0_0_10px_rgba(255,215,0,0.2)]"
                     : "shadow-[0_0_10px_rgba(255,255,255,0.3)]"
                 )}
                 priority
@@ -115,7 +124,11 @@ export function MainNav() {
                   {session.user.name || session.user.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: 'https://quranki.com' })}>
+                <DropdownMenuItem
+                  onClick={() =>
+                    signOut({ callbackUrl: "https://quranki.com" })
+                  }
+                >
                   Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -134,7 +147,13 @@ export function MainNav() {
           size="sm"
           onClick={toggleTheme}
           className="flex items-center gap-2"
-          aria-label={mounted ? (theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme") : "Toggle Theme"}
+          aria-label={
+            mounted
+              ? theme === "dark"
+                ? "Switch to Light Theme"
+                : "Switch to Dark Theme"
+              : "Toggle Theme"
+          }
         >
           {mounted ? (
             <>
