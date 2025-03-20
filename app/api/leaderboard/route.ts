@@ -19,34 +19,37 @@ export async function GET(request: Request) {
     const sortBy = searchParams.get("sortBy") || "totalAyahs"; // Default sort by total ayahs
     const skip = (page - 1) * perPage;
 
-    // Get total count first
-    const totalCount = await prisma.dailyLog.groupBy({
-      by: ["userId"],
-      _count: true,
+    // Fetch all users first - this ensures we include users with no daily logs
+    const allUsers = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      }
     });
 
-    // Fetch all users for the leaderboard (we'll sort and paginate later)
-    const leaderboardData = await prisma.dailyLog.groupBy({
+    // Get ayah counts for users who have dailyLogs
+    const userAyahCounts = await prisma.dailyLog.groupBy({
       by: ["userId"],
       _sum: {
         count: true,
       },
     });
 
-    // Fetch user details for each userId and calculate streaks
+    // Create a map of userId to ayah count for quick lookup
+    const ayahCountMap = new Map();
+    userAyahCounts.forEach(entry => {
+      ayahCountMap.set(entry.userId, entry._sum.count || 0);
+    });
+
+    // Process all users and calculate their stats
     let processedData = await Promise.all(
-      leaderboardData.map(async (entry: any, index: number) => {
-        const user = await prisma.user.findUnique({
-          where: { id: entry.userId },
-          select: {
-            name: true,
-            email: true,
-          },
-        });
+      allUsers.map(async (user) => {
+        const userId = user.id;
         
         // Get user's daily logs for streak calculation
         const userLogs = await prisma.dailyLog.findMany({
-          where: { userId: entry.userId },
+          where: { userId },
           select: { date: true },
           distinct: ['date'],
           orderBy: { date: 'desc' },
@@ -96,9 +99,9 @@ export async function GET(request: Request) {
         }
 
         return {
-          userId: entry.userId,
+          userId,
           name: "Anonymous", // Always use "Anonymous" instead of real name
-          totalAyahs: entry._sum.count || 0,
+          totalAyahs: ayahCountMap.get(userId) || 0, // Get ayah count from map or default to 0
           currentStreak,
           longestStreak,
         };
@@ -140,10 +143,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       data: paginatedData.map(({ userId, ...rest }) => rest), // Remove userId from response
       metadata: {
-        totalPages: Math.ceil(totalCount.length / perPage),
+        totalPages: Math.ceil(allUsers.length / perPage),
         currentPage: page,
         perPage,
-        totalCount: totalCount.length,
+        totalCount: allUsers.length,
       },
     });
   } catch (error) {
