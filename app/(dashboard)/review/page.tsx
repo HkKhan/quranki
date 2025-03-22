@@ -49,7 +49,7 @@ type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 
 export default function ReviewPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [ayahs, setAyahs] = useState<any[]>([]);
@@ -71,43 +71,43 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session?.user?.id) {
+    // Improved auth check to handle loading state
+    if (status === "unauthenticated") {
       router.push('/login');
-      return;
     }
-  }, [session, router]);
+  }, [status, router]);
 
-  // Separate effect for loading settings
+  // Only load settings when we're authenticated
   useEffect(() => {
-    const loadSettings = async () => {
-      if (!session?.user?.id) return;
-      
-      try {
-        console.log('Fetching user settings...');
-        const response = await fetch('/api/settings');
-        const data = await response.json();
-        console.log('Received settings:', data);
+    if (status === "authenticated" && session?.user?.id) {
+      const loadSettings = async () => {
+        try {
+          console.log('Fetching user settings...');
+          const response = await fetch('/api/settings');
+          const data = await response.json();
+          console.log('Received settings:', data);
 
-        if (data.settings) {
-          console.log('Setting user settings:', data.settings);
-          setSettings(data.settings);
-          setIsSettingsLoading(false);
-        } else {
-          console.log('No settings found');
-          setError('Please configure your review settings first');
+          if (data.settings) {
+            console.log('Setting user settings:', data.settings);
+            setSettings(data.settings);
+            setIsSettingsLoading(false);
+          } else {
+            console.log('No settings found');
+            setError('Please configure your review settings first');
+            setReviewStatus('error');
+            setIsSettingsLoading(false);
+          }
+        } catch (error) {
+          console.error('Error loading settings:', error);
+          setError('Failed to load settings');
           setReviewStatus('error');
           setIsSettingsLoading(false);
         }
-      } catch (error) {
-        console.error('Error loading settings:', error);
-        setError('Failed to load settings');
-        setReviewStatus('error');
-        setIsSettingsLoading(false);
-      }
-    };
+      };
 
-    loadSettings();
-  }, [session?.user?.id]);
+      loadSettings();
+    }
+  }, [session?.user?.id, status]);
 
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
