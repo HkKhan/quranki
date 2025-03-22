@@ -15,8 +15,8 @@ interface ReviewData {
 
 interface DayData {
   date: Date;
-  count: number;
-  isDue: boolean;
+  reviewCount: number;  // Past reviews (blue)
+  dueCount: number;     // Future due ayahs (red)
 }
 
 interface DailyLog {
@@ -33,6 +33,7 @@ export function ReviewHeatmap() {
     dailyAverage: 0,
     totalReviews: 0,
     daysWithReviews: 0,
+    totalDue: 0,
   });
 
   const goToPreviousYear = () => {
@@ -70,97 +71,102 @@ export function ReviewHeatmap() {
 
     const data: DayData[] = [];
     const today = new Date();
+    // Normalize today to midnight for comparison
+    const normalizedToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
 
     // Initialize data array with zeros
     for (let i = 0; i < days; i++) {
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + i);
-      data.push({ date, count: 0, isDue: false });
+      data.push({ date, reviewCount: 0, dueCount: 0 });
     }
 
     // Fetch review data from the database
     const fetchData = async () => {
       try {
-        // Fetch spaced repetition data for both reviews and due dates
-        const srResponse = await fetch("/api/spaced-repetition");
+        // Fetch both spaced repetition data and review stats
+        const [srResponse, reviewStatsResponse] = await Promise.all([
+          fetch("/api/spaced-repetition"),
+          fetch("/api/review-stats")
+        ]);
+        
         const srData = await srResponse.json();
+        const reviewStatsData = await reviewStatsResponse.json();
 
         let totalReviews = 0;
         let daysWithReviews = 0;
         let yearReviews = 0;
+        let totalDue = 0;
 
-        // Process review history from spaced repetition data
-        if (srData.data) {
-          // First pass: Count reviews per day
-          const reviewsByDay = new Map<string, number>();
+        // Process past review data from daily logs
+        if (reviewStatsData.success && reviewStatsData.reviewStats && reviewStatsData.reviewStats.dailyReviews) {
+          const dailyReviews = reviewStatsData.reviewStats.dailyReviews;
           
-          srData.data.forEach((item: ReviewData) => {
-            if (item.lastReviewed) {
-              const reviewDate = new Date(item.lastReviewed);
-              // Format date to local timezone midnight for consistent comparison
-              const dateKey = new Date(
-                reviewDate.getFullYear(),
-                reviewDate.getMonth(),
-                reviewDate.getDate()
-              ).toISOString();
-              reviewsByDay.set(dateKey, (reviewsByDay.get(dateKey) || 0) + 1);
-            }
-          });
-
-          // Apply review counts to data array
-          reviewsByDay.forEach((count, dateStr) => {
-            const reviewDate = new Date(dateStr);
+          // Map daily reviews to data array
+          Object.entries(dailyReviews).forEach(([dateStr, count]) => {
+            const reviewDate = new Date(dateStr + "T00:00:00");
             if (reviewDate.getFullYear() === currentYear) {
-              // Calculate dayOfYear using dates normalized to midnight
-              const normalizedStartDate = new Date(
-                startDate.getFullYear(),
-                startDate.getMonth(),
-                startDate.getDate()
-              );
+              // Calculate dayOfYear
               const dayOfYear = Math.floor(
-                (reviewDate.getTime() - normalizedStartDate.getTime()) /
+                (reviewDate.getTime() - startDate.getTime()) /
                   (1000 * 60 * 60 * 24)
               );
 
               if (dayOfYear >= 0 && dayOfYear < days) {
-                if (count > 0) {
+                const reviewCount = count as number;
+                if (reviewCount > 0) {
                   daysWithReviews++;
+                  data[dayOfYear].reviewCount = reviewCount;
+                  yearReviews += reviewCount;
                 }
-                data[dayOfYear].count = count;
-                yearReviews += count;
               }
             }
-            totalReviews += count;
+            totalReviews += count as number;
           });
+        }
 
-          // Second pass: Process due dates
-          srData.data.forEach((item: ReviewData) => {
+        // Process due ayahs
+        // First from review-stats API (preferred source)
+        if (reviewStatsData.success && reviewStatsData.reviewStats && reviewStatsData.reviewStats.dueItems) {
+          const dueItems = reviewStatsData.reviewStats.dueItems;
+          
+          dueItems.forEach((item: any) => {
+            const dueDate = new Date(item.dueDate);
+            
+            // Only process future due dates
+            if (dueDate >= normalizedToday && dueDate.getFullYear() === currentYear) {
+              const dayOfYear = Math.floor(
+                (dueDate.getTime() - startDate.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
+
+              if (dayOfYear >= 0 && dayOfYear < days) {
+                data[dayOfYear].dueCount += 1;
+                totalDue += 1;
+              }
+            }
+          });
+        }
+        // Fallback to spaced repetition data if review-stats API didn't have due items
+        else if (srData.srData && totalDue === 0) {
+          srData.srData.forEach((item: any) => {
             if (item.dueDate) {
               const dueDate = new Date(item.dueDate);
-              // Normalize today to midnight for comparison
-              const normalizedToday = new Date(
-                today.getFullYear(),
-                today.getMonth(),
-                today.getDate()
-              );
               
-              if (dueDate.getFullYear() === currentYear) {
-                const normalizedStartDate = new Date(
-                  startDate.getFullYear(),
-                  startDate.getMonth(),
-                  startDate.getDate()
-                );
+              // Only process future due dates
+              if (dueDate >= normalizedToday && dueDate.getFullYear() === currentYear) {
                 const dayOfYear = Math.floor(
-                  (dueDate.getTime() - normalizedStartDate.getTime()) /
+                  (dueDate.getTime() - startDate.getTime()) /
                     (1000 * 60 * 60 * 24)
                 );
 
                 if (dayOfYear >= 0 && dayOfYear < days) {
-                  data[dayOfYear].isDue = true;
-                  // Only count as due if it's a future date
-                  if (dueDate > normalizedToday) {
-                    data[dayOfYear].count += 1;
-                  }
+                  data[dayOfYear].dueCount += 1;
+                  totalDue += 1;
                 }
               }
             }
@@ -174,17 +180,25 @@ export function ReviewHeatmap() {
           dailyAverage,
           totalReviews: yearReviews,
           daysWithReviews,
+          totalDue,
         });
 
-        // Calculate color intensities
-        const maxCount = Math.max(...data.map((d) => d.count), 1); // Ensure non-zero max
-        const getColorIntensity = (count: number) => {
+        // Calculate max counts for color intensity
+        const maxReviewCount = Math.max(...data.map((d) => d.reviewCount), 1); // Ensure non-zero max
+        const maxDueCount = Math.max(...data.map((d) => d.dueCount), 1); // Ensure non-zero max
+        
+        const getReviewColorIntensity = (count: number) => {
           if (count === 0) return 0;
-          return Math.min(Math.ceil((count / maxCount) * 4), 4);
+          return Math.min(Math.ceil((count / maxReviewCount) * 4), 4);
+        };
+        
+        const getDueColorIntensity = (count: number) => {
+          if (count === 0) return 0;
+          return Math.min(Math.ceil((count / maxDueCount) * 4), 4);
         };
 
         // Color schemes matching Anki
-        const pastColors = [
+        const reviewColors = [
           "rgb(238, 238, 238)", // 0 reviews
           "rgb(219, 229, 241)", // 1-25% of max
           "rgb(171, 194, 225)", // 26-50% of max
@@ -243,9 +257,26 @@ export function ReviewHeatmap() {
             data: day,
           });
 
-          const intensity = getColorIntensity(day.count);
-          const colorArray = day.isDue ? dueColors : pastColors;
-          const color = colorArray[intensity];
+          // Determine which color to use
+          let color = reviewColors[0]; // Default empty color
+          
+          // Normalized date for comparison
+          const normalizedDayDate = new Date(
+            day.date.getFullYear(),
+            day.date.getMonth(),
+            day.date.getDate()
+          );
+          
+          // If this is a future day and there are due items, use due colors
+          if (normalizedDayDate > normalizedToday && day.dueCount > 0) {
+            const intensity = getDueColorIntensity(day.dueCount);
+            color = dueColors[intensity];
+          } 
+          // Otherwise if this is today or past and there are reviews, use review colors
+          else if (day.reviewCount > 0) {
+            const intensity = getReviewColorIntensity(day.reviewCount);
+            color = reviewColors[intensity];
+          }
 
           // Draw cell with rounded corners
           ctx.fillStyle = color;
@@ -268,9 +299,9 @@ export function ReviewHeatmap() {
           ctx.fill();
 
           // Highlight today
-          if (day.date.toDateString() === today.toDateString()) {
+          if (normalizedDayDate.getTime() === normalizedToday.getTime()) {
             ctx.strokeStyle = "#374151";
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1.5;
             ctx.stroke();
           }
         });
@@ -284,10 +315,10 @@ export function ReviewHeatmap() {
         ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
 
         // Past reviews legend
-        ctx.fillText("Past Reviews:", startX, legendY);
-        pastColors.slice(1).forEach((color, i) => {
+        ctx.fillText("Reviews:", startX, legendY);
+        reviewColors.slice(1).forEach((color, i) => {
           ctx.fillStyle = color;
-          ctx.fillRect(startX + 100 + i * 30, legendY - 12, 24, 10);
+          ctx.fillRect(startX + 70 + i * 30, legendY - 10, 24, 10);
         });
 
         // Future due legend
@@ -297,7 +328,7 @@ export function ReviewHeatmap() {
           ctx.fillStyle = color;
           ctx.fillRect(
             startX + canvasWidth / 2 - CANVAS_PADDING + 40 + i * 30,
-            legendY - 12,
+            legendY - 10,
             24,
             10
           );
@@ -385,17 +416,19 @@ export function ReviewHeatmap() {
                   day: "numeric",
                 })}
               </div>
-              <div>
-                {hoveredDay.isDue
-                  ? `${hoveredDay.count} ayah${
-                      hoveredDay.count === 1 ? "" : "s"
-                    } due`
-                  : hoveredDay.count === 0
-                  ? "No ayahs reviewed"
-                  : `${hoveredDay.count} ayah${
-                      hoveredDay.count === 1 ? "" : "s"
-                    } reviewed`}
-              </div>
+              {hoveredDay.reviewCount > 0 && (
+                <div>
+                  {hoveredDay.reviewCount} ayah{hoveredDay.reviewCount === 1 ? "" : "s"} reviewed
+                </div>
+              )}
+              {hoveredDay.dueCount > 0 && (
+                <div className="text-red-500 dark:text-red-400">
+                  {hoveredDay.dueCount} ayah{hoveredDay.dueCount === 1 ? "" : "s"} due
+                </div>
+              )}
+              {hoveredDay.reviewCount === 0 && hoveredDay.dueCount === 0 && (
+                <div>No activity</div>
+              )}
             </div>
           )}
         </div>
