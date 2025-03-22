@@ -10,12 +10,17 @@ import {
   getSurahAyahCount,
   getPrevAyahs
 } from "@/lib/quran-data"
+import { auth } from "@/app/auth";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const action = searchParams.get("action")
 
   try {
+    // Get user session for authenticated routes
+    const session = await auth();
+    const userId = session?.user?.id;
+
     if (action === "load") {
       // Just load basic info to verify the data is available
       const data = await loadQuranData()
@@ -75,10 +80,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Missing surah parameter" }, { status: 400 })
       }
 
+      // Check for user authentication
+      if (!userId) {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      }
+
       const surahNumbers = surahParam.split(",").map((s) => Number.parseInt(s, 10))
       const count = Number.parseInt(countParam, 10)
 
-      const reviewAyahs = await getReviewAyahsBySurah(surahNumbers, count)
+      const reviewAyahs = await getReviewAyahsBySurah(surahNumbers, count, userId)
       return NextResponse.json({ success: true, ayahs: reviewAyahs })
     }
 
@@ -116,10 +126,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Missing juz parameter" }, { status: 400 })
       }
 
+      // Check for user authentication
+      if (!userId) {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+      }
+
       const juzNumbers = juzParam.split(",").map((j) => Number.parseInt(j, 10))
       const count = Number.parseInt(countParam, 10)
 
-      const reviewAyahs = await getReviewAyahs(juzNumbers, count)
+      const reviewAyahs = await getReviewAyahs(juzNumbers, count, userId)
       return NextResponse.json({ success: true, ayahs: reviewAyahs })
     }
 

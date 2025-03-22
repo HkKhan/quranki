@@ -360,6 +360,8 @@ export default function ReviewPage() {
 
     // Save to database
     try {
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+      
       const response = await fetch("/api/spaced-repetition", {
         method: "POST",
         headers: {
@@ -373,6 +375,8 @@ export default function ReviewPage() {
           easeFactor: updatedAyah.easeFactor,
           lastReviewed: updatedAyah.lastReviewed,
           dueDate: updatedAyah.dueDate,
+          reviewDate: today,
+          selectionType: settings?.selectionType || "juzaa",
         }),
       });
 
