@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/app/auth";
 
 interface LeaderboardEntry {
   userId: string;
@@ -13,6 +14,10 @@ let previousRankings: Map<string, number> = new Map();
 
 export async function GET(request: Request) {
   try {
+    // Get the current authenticated user, if any
+    const session = await auth();
+    const currentUserId = session?.user?.id;
+    
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const perPage = parseInt(searchParams.get("perPage") || "10");
@@ -46,6 +51,7 @@ export async function GET(request: Request) {
     let processedData = await Promise.all(
       allUsers.map(async (user) => {
         const userId = user.id;
+        const isCurrentUser = userId === currentUserId;
         
         // Get user's daily logs for streak calculation
         const userLogs = await prisma.dailyLog.findMany({
@@ -55,43 +61,42 @@ export async function GET(request: Request) {
           orderBy: { date: 'desc' },
         });
         
-        // Calculate current streak
+        // Calculate streak using the same algorithm as the dashboard
         let currentStreak = 0;
-        let longestStreak = 0;
         
-        // Check if any logs exist
-        if (userLogs.length > 0) {
-          // Start with 1 for the first day
-          currentStreak = 1;
-          longestStreak = 1;
+        // Convert userLogs to just dates and sort them
+        const sortedDates = userLogs.map(log => log.date).sort((a, b) => b.localeCompare(a)); // Sort newest to oldest
+        
+        if (sortedDates.length > 0) {
+          // Check if user has reviewed today or yesterday to maintain streak
+          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+          const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]; // Yesterday in YYYY-MM-DD
           
-          // Check if the most recent log is from today or yesterday
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const yesterday = new Date(today);
-          yesterday.setDate(yesterday.getDate() - 1);
+          const mostRecentDate = sortedDates[0];
+          let hasActiveStreak = mostRecentDate === today || mostRecentDate === yesterday;
           
-          const mostRecentLogDate = new Date(userLogs[0].date);
-          mostRecentLogDate.setHours(0, 0, 0, 0);
-          
-          // If most recent log is older than yesterday, current streak is broken
-          if (mostRecentLogDate < yesterday) {
-            currentStreak = 0;
-          } else {
-            // Calculate current streak by checking consecutive days
-            for (let i = 0; i < userLogs.length - 1; i++) {
-              const currentDate = new Date(userLogs[i].date);
-              const nextDate = new Date(userLogs[i + 1].date);
+          if (hasActiveStreak) {
+            currentStreak = 1; // Start with 1 for the most recent day
+            
+            // Check for consecutive days
+            let currentDateObj = new Date(mostRecentDate + "T00:00:00Z");
+            
+            // Start from the second date (index 1) since we've already counted the most recent
+            for (let i = 1; i < sortedDates.length; i++) {
+              const dateObj = new Date(sortedDates[i] + "T00:00:00Z");
+              const daysDiff = Math.round(
+                (currentDateObj.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24)
+              );
               
-              // Check if dates are consecutive
-              const diffTime = Math.abs(currentDate.getTime() - nextDate.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              
-              if (diffDays === 1) {
+              if (daysDiff === 1) {
+                // Dates are consecutive
                 currentStreak++;
-                longestStreak = Math.max(longestStreak, currentStreak);
+                currentDateObj = dateObj;
+              } else if (daysDiff === 0) {
+                // Same day, continue checking without incrementing streak
+                continue;
               } else {
-                // Break in streak
+                // Streak is broken
                 break;
               }
             }
@@ -100,10 +105,11 @@ export async function GET(request: Request) {
 
         return {
           userId,
-          name: "Anonymous", // Always use "Anonymous" instead of real name
+          // Use real name for the current user, "Anonymous" for everyone else
+          name: isCurrentUser ? (user.name || "You") : "Anonymous",
           totalAyahs: ayahCountMap.get(userId) || 0, // Get ayah count from map or default to 0
           currentStreak,
-          longestStreak,
+          isCurrentUser, // Flag to identify if this entry belongs to the current user
         };
       })
     );

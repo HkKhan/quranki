@@ -35,6 +35,7 @@ interface LeaderboardEntry {
   totalAyahs: number;
   currentStreak: number;
   positionChange: number;
+  isCurrentUser?: boolean;
 }
 
 interface LeaderboardResponse {
@@ -191,6 +192,7 @@ export default function LeaderboardPage() {
           {leaderboard.map((entry, index) => {
             const rank = (currentPage - 1) * perPage + index + 1;
             const isTopThree = rank <= 3;
+            const isCurrentUser = entry.isCurrentUser;
 
             return (
               <div
@@ -202,6 +204,7 @@ export default function LeaderboardPage() {
                       ? "bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-700 border-2"
                       : "bg-white dark:bg-slate-800 border"
                   }
+                  ${isCurrentUser ? "ring-2 ring-blue-500 dark:ring-blue-400" : ""}
                   border-slate-200 dark:border-slate-700
                   shadow-sm transition-all hover:shadow hover:bg-opacity-90
                 `}
@@ -240,8 +243,9 @@ export default function LeaderboardPage() {
                 {/* Name with rank icon for top 3 and position change */}
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center">
-                    <div className="text-lg font-semibold truncate">
+                    <div className={`text-lg font-semibold truncate ${isCurrentUser ? "text-blue-600 dark:text-blue-400" : ""}`}>
                       {entry.name}
+                      {isCurrentUser && <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded-full">You</span>}
                     </div>
                     {getRankIcon(rank)}
                     <div className="ml-2">
