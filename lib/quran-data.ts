@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { parse } from "csv-parse/sync";
+import { prisma } from "@/lib/prisma";
 
 export interface QuranAyah {
   surah_no: number;
@@ -13,6 +14,11 @@ export interface QuranAyah {
   ayah_en: string;
   ruko_no: number;
   juz_no: number;
+  interval?: number;
+  repetitions?: number;
+  easeFactor?: number;
+  dueDate?: number;
+  lastReviewed?: number;
 }
 
 let quranData: QuranAyah[] | null = null;
@@ -108,21 +114,80 @@ export async function getPrevAyahs(
 
 export async function getReviewAyahs(
   juzNumbers: number[],
-  count = 20
+  count = 20,
+  userId?: string
 ): Promise<QuranAyah[]> {
   const ayahs = await getAyahsByJuz(juzNumbers);
+  
+  if (!userId) {
+    const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  }
 
-  // In a real app, we would use a spaced repetition algorithm to select ayahs
-  // For now, we'll just select random ayahs from the specified juzaa
-  const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
+  try {
+    const srData = await prisma.spacedRepetitionData.findMany({
+      where: {
+        userId,
+        selectionType: "juzaa",
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+
+    const now = new Date();
+    
+    const dueAyahs = srData
+      .filter(item => new Date(item.dueDate) <= now)
+      .map(item => {
+        const ayah = ayahs.find(a => 
+          a.surah_no === item.surahNo && 
+          a.ayah_no_surah === item.ayahNoSurah
+        );
+        
+        if (!ayah) return null;
+        
+        return {
+          ...ayah,
+          interval: item.interval,
+          repetitions: item.repetitions,
+          easeFactor: item.easeFactor,
+          dueDate: item.dueDate.getTime(),
+          lastReviewed: item.lastReviewed.getTime(),
+        };
+      })
+      .filter(Boolean) as QuranAyah[];
+    
+    if (dueAyahs.length >= count) {
+      return dueAyahs.slice(0, count);
+    }
+    
+    const reviewedAyahKeys = new Set(
+      srData.map(item => `${item.surahNo}:${item.ayahNoSurah}`)
+    );
+    
+    const unreviewedAyahs = ayahs.filter(
+      ayah => !reviewedAyahKeys.has(`${ayah.surah_no}:${ayah.ayah_no_surah}`)
+    );
+    
+    const shuffledUnreviewed = [...unreviewedAyahs].sort(() => 0.5 - Math.random());
+    
+    const result = [
+      ...dueAyahs,
+      ...shuffledUnreviewed.slice(0, count - dueAyahs.length)
+    ];
+    
+    return result.slice(0, count);
+  } catch (error) {
+    console.error("Error getting review ayahs:", error);
+    const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  }
 }
 
-// Get all unique surahs from the Quran data
 export async function getAllSurahs(): Promise<{ surah_no: number; surah_name_en: string; surah_name_ar: string; surah_name_roman: string }[]> {
   const data = await loadQuranData();
   
-  // Extract unique surahs using Set and map
   const uniqueSurahs = Array.from(
     new Set(data.map(ayah => ayah.surah_no))
   ).map(surahNo => {
@@ -135,11 +200,9 @@ export async function getAllSurahs(): Promise<{ surah_no: number; surah_name_en:
     };
   });
   
-  // Sort by surah number
   return uniqueSurahs.sort((a, b) => a.surah_no - b.surah_no);
 }
 
-// Get ayahs by surah numbers
 export async function getAyahsBySurah(
   surahNumbers: number[]
 ): Promise<QuranAyah[]> {
@@ -147,19 +210,79 @@ export async function getAyahsBySurah(
   return data.filter((ayah) => surahNumbers.includes(ayah.surah_no));
 }
 
-// Get ayahs for review by surah numbers
 export async function getReviewAyahsBySurah(
   surahNumbers: number[],
-  count = 20
+  count = 20,
+  userId?: string
 ): Promise<QuranAyah[]> {
   const ayahs = await getAyahsBySurah(surahNumbers);
+  
+  if (!userId) {
+    const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  }
 
-  // Similar to juz review, randomly select ayahs for review
-  const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
+  try {
+    const srData = await prisma.spacedRepetitionData.findMany({
+      where: {
+        userId,
+        selectionType: "surah",
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+
+    const now = new Date();
+    
+    const dueAyahs = srData
+      .filter(item => new Date(item.dueDate) <= now)
+      .map(item => {
+        const ayah = ayahs.find(a => 
+          a.surah_no === item.surahNo && 
+          a.ayah_no_surah === item.ayahNoSurah
+        );
+        
+        if (!ayah) return null;
+        
+        return {
+          ...ayah,
+          interval: item.interval,
+          repetitions: item.repetitions,
+          easeFactor: item.easeFactor,
+          dueDate: item.dueDate.getTime(),
+          lastReviewed: item.lastReviewed.getTime(),
+        };
+      })
+      .filter(Boolean) as QuranAyah[];
+    
+    if (dueAyahs.length >= count) {
+      return dueAyahs.slice(0, count);
+    }
+    
+    const reviewedAyahKeys = new Set(
+      srData.map(item => `${item.surahNo}:${item.ayahNoSurah}`)
+    );
+    
+    const unreviewedAyahs = ayahs.filter(
+      ayah => !reviewedAyahKeys.has(`${ayah.surah_no}:${ayah.ayah_no_surah}`)
+    );
+    
+    const shuffledUnreviewed = [...unreviewedAyahs].sort(() => 0.5 - Math.random());
+    
+    const result = [
+      ...dueAyahs,
+      ...shuffledUnreviewed.slice(0, count - dueAyahs.length)
+    ];
+    
+    return result.slice(0, count);
+  } catch (error) {
+    console.error("Error getting review ayahs by surah:", error);
+    const shuffled = [...ayahs].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  }
 }
 
-// Get the total number of ayahs in a surah
 export async function getSurahAyahCount(surahNo: number): Promise<number> {
   const data = await loadQuranData();
   return data.filter(ayah => ayah.surah_no === surahNo).length;

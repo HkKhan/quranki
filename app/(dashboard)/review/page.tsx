@@ -49,7 +49,7 @@ type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 
 export default function ReviewPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [ayahs, setAyahs] = useState<any[]>([]);
@@ -71,43 +71,43 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session?.user?.id) {
+    // Improved auth check to handle loading state
+    if (status === "unauthenticated") {
       router.push('/login');
-      return;
     }
-  }, [session, router]);
+  }, [status, router]);
 
-  // Separate effect for loading settings
+  // Only load settings when we're authenticated
   useEffect(() => {
-    const loadSettings = async () => {
-      if (!session?.user?.id) return;
-      
-      try {
-        console.log('Fetching user settings...');
-        const response = await fetch('/api/settings');
-        const data = await response.json();
-        console.log('Received settings:', data);
+    if (status === "authenticated" && session?.user?.id) {
+      const loadSettings = async () => {
+        try {
+          console.log('Fetching user settings...');
+          const response = await fetch('/api/settings');
+          const data = await response.json();
+          console.log('Received settings:', data);
 
-        if (data.settings) {
-          console.log('Setting user settings:', data.settings);
-          setSettings(data.settings);
-          setIsSettingsLoading(false);
-        } else {
-          console.log('No settings found');
-          setError('Please configure your review settings first');
+          if (data.settings) {
+            console.log('Setting user settings:', data.settings);
+            setSettings(data.settings);
+            setIsSettingsLoading(false);
+          } else {
+            console.log('No settings found');
+            setError('Please configure your review settings first');
+            setReviewStatus('error');
+            setIsSettingsLoading(false);
+          }
+        } catch (error) {
+          console.error('Error loading settings:', error);
+          setError('Failed to load settings');
           setReviewStatus('error');
           setIsSettingsLoading(false);
         }
-      } catch (error) {
-        console.error('Error loading settings:', error);
-        setError('Failed to load settings');
-        setReviewStatus('error');
-        setIsSettingsLoading(false);
-      }
-    };
+      };
 
-    loadSettings();
-  }, [session?.user?.id]);
+      loadSettings();
+    }
+  }, [session?.user?.id, status]);
 
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
@@ -360,6 +360,11 @@ export default function ReviewPage() {
 
     // Save to database
     try {
+      // Fix: Ensure date uses local timezone instead of UTC
+      const now = new Date();
+      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
+      
       const response = await fetch("/api/spaced-repetition", {
         method: "POST",
         headers: {
@@ -373,6 +378,8 @@ export default function ReviewPage() {
           easeFactor: updatedAyah.easeFactor,
           lastReviewed: updatedAyah.lastReviewed,
           dueDate: updatedAyah.dueDate,
+          reviewDate: today,
+          selectionType: settings?.selectionType || "juzaa",
         }),
       });
 
@@ -386,7 +393,11 @@ export default function ReviewPage() {
 
     // Save daily log
     try {
-      const today = new Date().toISOString().split("T")[0];
+      // Fix: Ensure date uses local timezone instead of UTC
+      const now = new Date();
+      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
+      
       await fetch("/api/daily-logs", {
         method: "POST",
         headers: {

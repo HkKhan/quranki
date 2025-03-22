@@ -38,47 +38,57 @@ interface SurahInfo {
 
 export default function SetupPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [selectedJuzaa, setSelectedJuzaa] = useState<number[]>([]);
   const [selectedSurahs, setSelectedSurahs] = useState<number[]>([]);
-  const [ayahsAfter, setAyahsAfter] = useState(2);
+  const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
+  const [ayahsAfter, setAyahsAfter] = useState(3);
   const [promptsPerSession, setPromptsPerSession] = useState(20);
+  const [selectionType, setSelectionType] = useState<"juzaa" | "surah">("juzaa");
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectionType, setSelectionType] = useState<"juzaa" | "surah">("juzaa");
-  const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!session?.user?.id) {
-      router.push('/login');
-      return;
-    }
+  // Load existing settings from the database
+  const loadSettings = async () => {
+    try {
+      const response = await fetch('/api/settings');
+      const data = await response.json();
 
-    // Load existing settings from the database
-    const loadSettings = async () => {
-      try {
-        const response = await fetch('/api/settings');
-        const data = await response.json();
-
-        if (data.settings) {
-          setSelectedJuzaa(data.settings.selectedJuzaa || []);
-          setSelectedSurahs(data.settings.selectedSurahs || []);
-          setAyahsAfter(data.settings.ayahsAfter || 2);
-          setPromptsPerSession(data.settings.promptsPerSession || 20);
-          setSelectionType(data.settings.selectionType || "juzaa");
-        }
-      } catch (error) {
-        console.error('Error loading settings:', error);
-        setError('Failed to load settings');
+      if (data.settings) {
+        setSelectedJuzaa(data.settings.selectedJuzaa || []);
+        setSelectedSurahs(data.settings.selectedSurahs || []);
+        setAyahsAfter(data.settings.ayahsAfter || 3);
+        setPromptsPerSession(data.settings.promptsPerSession || 20);
+        setSelectionType(data.settings.selectionType || "juzaa");
       }
-    };
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      setError('Failed to load settings');
+    }
+  };
 
-    // Load all surahs and settings
-    Promise.all([loadSurahs(), loadSettings(), verifyQuranData()])
-      .finally(() => setIsLoading(false));
-  }, [session, router]);
+  useEffect(() => {
+    // Improved auth check to handle loading state
+    if (status === "unauthenticated") {
+      router.push('/login');
+    }
+  }, [status, router]);
+
+  // Load data when authenticated
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      const initializeSetup = async () => {
+        setIsLoading(true);
+        await Promise.all([loadSettings(), loadSurahs(), verifyQuranData()]);
+        setIsLoading(false);
+      };
+      
+      initializeSetup();
+    }
+  }, [session?.user?.id, status]);
 
   const loadSurahs = async () => {
     try {

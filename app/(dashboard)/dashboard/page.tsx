@@ -270,22 +270,24 @@ export default function DashboardPage() {
 
   const calculateAllReviewStats = async () => {
     try {
-      const [srResponse, logsResponse] = await Promise.all([
+      const [srResponse, logsResponse, reviewStatsResponse] = await Promise.all([
         fetch("/api/spaced-repetition"),
-        fetch("/api/daily-logs")
+        fetch("/api/daily-logs"),
+        fetch("/api/review-stats")
       ]);
 
-      if (!srResponse.ok || !logsResponse.ok) {
-        if (srResponse.status === 401 || logsResponse.status === 401) {
+      if (!srResponse.ok || !logsResponse.ok || !reviewStatsResponse.ok) {
+        if (srResponse.status === 401 || logsResponse.status === 401 || reviewStatsResponse.status === 401) {
           router.push('/login');
           return;
         }
         throw new Error('Failed to fetch review stats');
       }
 
-      const [srData, logsData] = await Promise.all([
+      const [srData, logsData, reviewStatsData] = await Promise.all([
         srResponse.json(),
-        logsResponse.json()
+        logsResponse.json(),
+        reviewStatsResponse.json()
       ]);
 
       // For tracking streaks and daily activity
@@ -300,14 +302,24 @@ export default function DashboardPage() {
       const startOfDay = new Date(now).setHours(0, 0, 0, 0);
       const endOfDay = new Date(now).setHours(23, 59, 59, 999);
 
-      if (srData.data) {
+      // Calculate due ayahs for today using spaced repetition data
+      if (srData.srData && Array.isArray(srData.srData)) {
         // Count ayahs due today
-        dueToday = srData.data.filter((item: ReviewData) => {
-          return item.dueDate >= startOfDay && item.dueDate <= endOfDay;
+        dueToday = srData.srData.filter((item: any) => {
+          const dueDate = new Date(item.dueDate).getTime();
+          return dueDate >= startOfDay && dueDate <= endOfDay;
         }).length;
 
+        // If we couldn't find any due today, check if there are any that became due earlier
+        if (dueToday === 0) {
+          dueToday = srData.srData.filter((item: any) => {
+            const dueDate = new Date(item.dueDate).getTime();
+            return dueDate <= now;
+          }).length;
+        }
+
         // Record review dates for streak calculation
-        srData.data.forEach((item: ReviewData) => {
+        srData.srData.forEach((item: any) => {
           if (item.lastReviewed) {
             const reviewDate = new Date(item.lastReviewed).toISOString().split('T')[0];
             reviewDays.add(reviewDate);
@@ -315,7 +327,37 @@ export default function DashboardPage() {
         });
       }
 
-      if (logsData.logs) {
+      // Use review stats API data if available
+      if (reviewStatsData.success && reviewStatsData.reviewStats) {
+        // If we have review stats, use those for dailyReviews
+        if (reviewStatsData.reviewStats.dailyReviews) {
+          Object.entries(reviewStatsData.reviewStats.dailyReviews).forEach(([date, count]) => {
+            dailyReviews[date] = count as number;
+            reviewDays.add(date);
+            totalReviewed += count as number;
+          });
+        }
+
+        // If we have due items from the review stats API, update dueToday
+        if (reviewStatsData.reviewStats.dueItems && dueToday === 0) {
+          const todayStartStr = new Date(startOfDay).toISOString();
+          const todayEndStr = new Date(endOfDay).toISOString();
+          
+          dueToday = reviewStatsData.reviewStats.dueItems.filter((item: any) => {
+            const dueDate = new Date(item.dueDate).toISOString();
+            return dueDate >= todayStartStr && dueDate <= todayEndStr;
+          }).length;
+
+          // If no items due today, check for overdue items
+          if (dueToday === 0) {
+            dueToday = reviewStatsData.reviewStats.dueItems.filter((item: any) => {
+              const dueDate = new Date(item.dueDate);
+              return dueDate <= new Date();
+            }).length;
+          }
+        }
+      } else if (logsData.logs) {
+        // Fall back to logs data if review stats API data is not available
         logsData.logs.forEach((log: any) => {
           const date = log.date;
           reviewDays.add(date);
