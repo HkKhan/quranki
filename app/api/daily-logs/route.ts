@@ -46,7 +46,10 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     const { date, ayahKey } = data;
-
+    
+    // Ensure we're using the date provided by the client
+    // This ensures timezone consistency since the client creates the date in local timezone
+    
     const log = await prisma.dailyLog.upsert({
       where: {
         userId_date_ayahKey: {

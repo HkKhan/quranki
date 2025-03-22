@@ -57,6 +57,8 @@ export async function GET(request: NextRequest) {
     
     // Process daily logs
     dailyLogs.forEach((log) => {
+      // Use the date string exactly as stored in the database
+      // The client will handle timezone adjustments
       if (!dailyReviews[log.date]) {
         dailyReviews[log.date] = 0;
       }

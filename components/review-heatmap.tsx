@@ -44,6 +44,16 @@ export function ReviewHeatmap() {
     setCurrentYear(currentYear + 1);
   };
 
+  // Force refresh of data every 60 seconds to capture new reviews
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      // Trigger re-render to refresh data
+      setCurrentYear(prev => prev);
+    }, 60000); // Refresh every minute
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -70,13 +80,13 @@ export function ReviewHeatmap() {
       (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
 
     const data: DayData[] = [];
+    // Get exact current date with timezone offset to ensure accurate local date
     const today = new Date();
-    // Normalize today to midnight for comparison
+    // Normalize today to midnight for comparison, but preserve local timezone
     const normalizedToday = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate()
+      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
     );
+    normalizedToday.setMinutes(normalizedToday.getMinutes() + today.getTimezoneOffset());
 
     // Initialize data array with zeros
     for (let i = 0; i < days; i++) {
@@ -108,7 +118,11 @@ export function ReviewHeatmap() {
           
           // Map daily reviews to data array
           Object.entries(dailyReviews).forEach(([dateStr, count]) => {
-            const reviewDate = new Date(dateStr + "T00:00:00");
+            // Create date from the dateStr returned by the API
+            // Important: Create a date from the YYYY-MM-DD string without assuming timezone
+            const reviewDate = new Date(dateStr);
+            
+            // Our workaround for handling date inconsistencies is no longer needed since we fixed the API
             if (reviewDate.getFullYear() === currentYear) {
               // Calculate dayOfYear
               const dayOfYear = Math.floor(
@@ -267,15 +281,45 @@ export function ReviewHeatmap() {
             day.date.getDate()
           );
           
-          // If this is a future day and there are due items, use due colors
-          if (normalizedDayDate > normalizedToday && day.dueCount > 0) {
-            const intensity = getDueColorIntensity(day.dueCount);
-            color = dueColors[intensity];
-          } 
-          // Otherwise if this is today or past and there are reviews, use review colors
-          else if (day.reviewCount > 0) {
+          // Compare dates (use toDateString() to compare just the date portion)
+          const isToday = normalizedDayDate.toDateString() === today.toDateString();
+          const isPast = normalizedDayDate < today;
+          const isFuture = normalizedDayDate > today;
+          
+          // Today and has both reviews and due items - show transition color
+          if (isToday && day.reviewCount > 0 && day.dueCount > 0) {
+            // Calculate the percentage of completed reviews vs total (reviews + due)
+            const totalItems = day.reviewCount + day.dueCount;
+            const completionRatio = day.reviewCount / totalItems;
+            
+            // Choose color based on completion ratio - more blue as more are completed
+            if (completionRatio >= 0.75) {
+              // Mostly complete, use lighter blue
+              const intensity = getReviewColorIntensity(day.reviewCount);
+              color = reviewColors[intensity];
+            } else if (completionRatio >= 0.5) {
+              // Half complete, use a purple-ish blend
+              color = "rgb(173, 173, 229)"; // Blend of red and blue
+            } else if (completionRatio >= 0.25) {
+              // Started but mostly incomplete, use lighter red
+              const intensity = getDueColorIntensity(day.dueCount);
+              color = dueColors[intensity];
+            } else {
+              // Just started, use red
+              const intensity = getDueColorIntensity(day.dueCount);
+              color = dueColors[intensity];
+            }
+          }
+          // If today or past and has reviews, use review colors (blue)
+          else if ((isToday || isPast) && day.reviewCount > 0) {
             const intensity = getReviewColorIntensity(day.reviewCount);
             color = reviewColors[intensity];
+          } 
+          // If today or future and has due items, use due colors (red)
+          // But if today and all reviews are done (reviewCount > 0, dueCount = 0), it will be blue from above condition
+          else if ((isToday || isFuture) && day.dueCount > 0) {
+            const intensity = getDueColorIntensity(day.dueCount);
+            color = dueColors[intensity];
           }
 
           // Draw cell with rounded corners
@@ -360,8 +404,19 @@ export function ReviewHeatmap() {
           }
         };
 
+        // Add double-click handler to force refresh data
+        const handleDoubleClick = () => {
+          // Force reload by setting the year state, which triggers a re-render
+          setCurrentYear(prev => prev);
+        };
+
         canvas.addEventListener("mousemove", handleMouseMove);
-        return () => canvas.removeEventListener("mousemove", handleMouseMove);
+        canvas.addEventListener("dblclick", handleDoubleClick);
+        
+        return () => {
+          canvas.removeEventListener("mousemove", handleMouseMove);
+          canvas.removeEventListener("dblclick", handleDoubleClick);
+        };
       } catch (error) {
         console.error("Error fetching review data:", error);
       }

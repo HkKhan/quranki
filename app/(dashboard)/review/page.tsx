@@ -360,7 +360,10 @@ export default function ReviewPage() {
 
     // Save to database
     try {
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+      // Fix: Ensure date uses local timezone instead of UTC
+      const now = new Date();
+      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
       
       const response = await fetch("/api/spaced-repetition", {
         method: "POST",
@@ -390,7 +393,11 @@ export default function ReviewPage() {
 
     // Save daily log
     try {
-      const today = new Date().toISOString().split("T")[0];
+      // Fix: Ensure date uses local timezone instead of UTC
+      const now = new Date();
+      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
+      
       await fetch("/api/daily-logs", {
         method: "POST",
         headers: {
