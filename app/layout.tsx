@@ -1,12 +1,12 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Analytics } from "@vercel/analytics/react"
+import { Analytics } from "@vercel/analytics/react";
 import { MainNav } from "@/components/main-nav";
-import { Providers } from './providers';
+import { Providers } from "./providers";
 import { Metadata } from "next";
 import { ToastProvider } from "@/components/ui/toast";
-import { GoogleAnalytics } from '@next/third-parties/google'
+import { GoogleAnalytics } from "@next/third-parties/google";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,7 +20,8 @@ export const metadata: Metadata = {
     default: "Quranki",
     template: "%s | Quranki",
   },
-  description: "An intelligent spaced repetition system designed specifically for Quran review.",
+  description:
+    "An intelligent spaced repetition system designed specifically for Quran review.",
   keywords: [
     "Quran",
     "Review",
@@ -42,22 +43,33 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://quranki.com",
     title: "Quranki",
-    description: "An intelligent spaced repetition system designed specifically for Quran review.",
+    description:
+      "An intelligent spaced repetition system designed specifically for Quran review.",
     siteName: "Quranki",
+    images: [
+      {
+        url: "/quranki-preview.png",
+        width: 1200,
+        height: 630,
+        alt: "Quranki - Intelligent Quran Review System",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Quranki",
-    description: "An intelligent spaced repetition system designed specifically for Quran review.",
+    description:
+      "An intelligent spaced repetition system designed specifically for Quran review.",
     creator: "@quranki",
+    images: ["/quranki-preview.png"],
   },
   icons: {
     icon: [
       { url: "/quranmeta.ico", sizes: "any" },
-      { url: "/quranmetadata.png", type: "image/png" }
+      { url: "/quranmetadata.png", type: "image/png" },
     ],
     shortcut: ["/quranmeta.ico"],
-    apple: [{ url: "/quranmetadata.png", sizes: "180x180", type: "image/png" }]
+    apple: [{ url: "/quranmetadata.png", sizes: "180x180", type: "image/png" }],
   },
   manifest: "/manifest.json",
 };
@@ -102,9 +114,7 @@ export default function RootLayout({
             <ToastProvider>
               <div className="flex min-h-screen flex-col">
                 <MainNav />
-                <main className="flex-1">
-                  {children}
-                </main>
+                <main className="flex-1">{children}</main>
                 <footer className="border-t py-6 md:py-0">
                   <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
                     <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
