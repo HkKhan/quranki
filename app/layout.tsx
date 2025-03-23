@@ -6,6 +6,7 @@ import { MainNav } from "@/components/main-nav";
 import { Providers } from './providers';
 import { Metadata } from "next";
 import { ToastProvider } from "@/components/ui/toast";
+import { GoogleAnalytics } from '@next/third-parties/google'
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -88,6 +89,9 @@ export default function RootLayout({
       <body
         className={`${inter.className} min-h-screen bg-background font-sans antialiased`}
       >
+        {process.env.NEXT_PUBLIC_GA_ID && (
+          <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+        )}
         <Providers>
           <ThemeProvider
             attribute="class"
