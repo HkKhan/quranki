@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { BookOpen, Moon, Sun, User } from "lucide-react";
+import { BookOpen, Menu, Moon, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Image from "next/image";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export function MainNav() {
   const pathname = usePathname();
@@ -65,6 +66,34 @@ export function MainNav() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
+        <div className="md:hidden mr-2">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="mr-2">
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-[240px] sm:w-[240px]">
+              <nav className="flex flex-col space-y-4 mt-8">
+                {routes.map((route) => (
+                  <Link
+                    key={route.href}
+                    href={route.href}
+                    className={cn(
+                      "text-sm font-medium py-2 transition-colors hover:text-primary",
+                      route.active
+                        ? "border-l-2 border-primary pl-3 text-foreground"
+                        : "text-foreground pl-4"
+                    )}
+                  >
+                    {route.label}
+                  </Link>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
         <div className="flex items-center mr-4">
           <Link href="/" className="flex items-center">
             <div
@@ -94,7 +123,7 @@ export function MainNav() {
           </Link>
         </div>
         <div className="flex-1"></div>
-        <nav className="flex items-center space-x-6 pr-6">
+        <nav className="hidden md:flex items-center space-x-6 pr-6">
           {routes.map((route) => (
             <Link
               key={route.href}
@@ -109,6 +138,8 @@ export function MainNav() {
               {route.label}
             </Link>
           ))}
+        </nav>
+        <div className="flex items-center space-x-2">
           {isLoading ? (
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
           ) : session?.user ? (
@@ -141,33 +172,35 @@ export function MainNav() {
               Sign in
             </Link>
           )}
-        </nav>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleTheme}
-          className="flex items-center gap-2"
-          aria-label={
-            mounted
-              ? theme === "dark"
-                ? "Switch to Light Theme"
-                : "Switch to Dark Theme"
-              : "Toggle Theme"
-          }
-        >
-          {mounted ? (
-            <>
-              {theme === "dark" ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )}
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
-            </>
-          ) : (
-            <span className="h-5 w-5" />
-          )}
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleTheme}
+            className="flex items-center gap-2"
+            aria-label={
+              mounted
+                ? theme === "dark"
+                  ? "Switch to Light Theme"
+                  : "Switch to Dark Theme"
+                : "Toggle Theme"
+            }
+          >
+            {mounted ? (
+              <>
+                {theme === "dark" ? (
+                  <Sun className="h-5 w-5" />
+                ) : (
+                  <Moon className="h-5 w-5" />
+                )}
+                <span className="hidden md:inline">
+                  {theme === "dark" ? "Light" : "Dark"}
+                </span>
+              </>
+            ) : (
+              <span className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
       </div>
     </header>
   );
