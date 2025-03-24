@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -48,7 +48,8 @@ interface QuranAyah {
 
 type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 
-export default function ReviewPage() {
+// Create a client component that uses useSearchParams
+function ReviewPageContent() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
@@ -113,16 +114,30 @@ export default function ReviewPage() {
 
           // For authenticated users, always load their settings
           console.log("Fetching user settings...");
-          const response = await fetch("/api/settings");
+          const response = await fetch("/api/settings", {
+            // Add cache control to prevent caching settings
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0"
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error("Failed to load settings");
+          }
+          
           const data = await response.json();
           console.log("Received settings:", data);
 
-          if (data.settings) {
+          if (data.settings && 
+             ((data.settings.selectionType === "juzaa" && data.settings.selectedJuzaa?.length > 0) || 
+              (data.settings.selectionType === "surah" && data.settings.selectedSurahs?.length > 0))) {
             console.log("Setting user settings:", data.settings);
             setSettings(data.settings);
             setIsSettingsLoading(false);
           } else {
-            console.log("No settings found");
+            console.log("No valid settings found");
             setError("Please configure your review settings first");
             setReviewStatus("error");
             setIsSettingsLoading(false);
@@ -146,6 +161,22 @@ export default function ReviewPage() {
       loadAyahs();
     }
   }, [isSettingsLoading, settings]);
+
+  // Move the conditional useEffect to the top level
+  useEffect(() => {
+    // Only run this timer if we are in the loading state
+    if ((isSettingsLoading || isLoading) && status === "authenticated" && !isGuestMode) {
+      const timer = setTimeout(() => {
+        if (isSettingsLoading) {
+          setError("Please configure your review settings first");
+          setReviewStatus("error");
+          setIsSettingsLoading(false);
+        }
+      }, 3000); // Show error after 3 seconds if still loading
+
+      return () => clearTimeout(timer);
+    }
+  }, [isSettingsLoading, isLoading, status, isGuestMode]);
 
   const loadAyahs = async () => {
     if (!settings) {
@@ -524,21 +555,6 @@ export default function ReviewPage() {
   }
 
   if (isSettingsLoading || isLoading) {
-    // Add a timeout to prevent infinite loading for users without settings
-    useEffect(() => {
-      if (status === "authenticated" && !isGuestMode) {
-        const timer = setTimeout(() => {
-          if (isSettingsLoading) {
-            setError("Please configure your review settings first");
-            setReviewStatus("error");
-            setIsSettingsLoading(false);
-          }
-        }, 3000); // Show error after 3 seconds if still loading
-
-        return () => clearTimeout(timer);
-      }
-    }, [isSettingsLoading, status, isGuestMode]);
-
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
@@ -563,18 +579,37 @@ export default function ReviewPage() {
           <p className="mb-6">
             Great job! Consistent review helps strengthen your memorization.
           </p>
+          {isGuestMode && status !== "authenticated" && (
+            <Alert className="mb-4 bg-yellow-50 border-yellow-200">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription>
+                <span className="text-yellow-800">
+                  Sign up to start tracking your review journey and experience all features!
+                </span>
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
         <CardFooter className="flex justify-center space-x-4">
           <Button variant="outline" onClick={resetReview}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Review More
           </Button>
-          <Link href="/dashboard">
-            <Button>
-              Back to Dashboard
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          {isGuestMode && status !== "authenticated" ? (
+            <Link href="/register">
+              <Button>
+                Sign Up
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/dashboard">
+              <Button>
+                Back to Dashboard
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </CardFooter>
       </Card>
     );
@@ -747,5 +782,19 @@ export default function ReviewPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p>Loading...</p>
+      </div>
+    }>
+      <ReviewPageContent />
+    </Suspense>
   );
 }
