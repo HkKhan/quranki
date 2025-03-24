@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface QuranAyah {
   surah_no: number;
@@ -50,6 +51,8 @@ type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 export default function ReviewPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
+  const isGuestMode = searchParams.get("guest") === "true";
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [ayahs, setAyahs] = useState<any[]>([]);
@@ -71,55 +74,82 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Improved auth check to handle loading state
-    if (status === "unauthenticated") {
-      router.push('/login');
+    // Skip auth check for guest mode
+    if (!isGuestMode && status === "unauthenticated") {
+      router.push("/login");
     }
-  }, [status, router]);
+  }, [status, router, isGuestMode]);
 
-  // Only load settings when we're authenticated
+  // Only load settings when we're authenticated or in guest mode
   useEffect(() => {
-    if (status === "authenticated" && session?.user?.id) {
+    if ((status === "authenticated" && session?.user?.id) || isGuestMode) {
       const loadSettings = async () => {
         try {
-          console.log('Fetching user settings...');
-          const response = await fetch('/api/settings');
+          // Only use guest mode settings if user is not authenticated
+          if (isGuestMode && status !== "authenticated") {
+            const juz = searchParams.get("juz")
+              ? Number(searchParams.get("juz"))
+              : 30;
+            const ayahsAfter = searchParams.get("ayahsAfter")
+              ? Number(searchParams.get("ayahsAfter"))
+              : 2;
+
+            console.log(
+              "Setting guest settings: juz",
+              juz,
+              "ayahsAfter",
+              ayahsAfter
+            );
+            setSettings({
+              selectedJuzaa: [juz],
+              selectedSurahs: [],
+              selectionType: "juzaa",
+              ayahsAfter,
+              promptsPerSession: 20,
+            });
+            setIsSettingsLoading(false);
+            return;
+          }
+
+          // For authenticated users, always load their settings
+          console.log("Fetching user settings...");
+          const response = await fetch("/api/settings");
           const data = await response.json();
-          console.log('Received settings:', data);
+          console.log("Received settings:", data);
 
           if (data.settings) {
-            console.log('Setting user settings:', data.settings);
+            console.log("Setting user settings:", data.settings);
             setSettings(data.settings);
             setIsSettingsLoading(false);
           } else {
-            console.log('No settings found');
-            setError('Please configure your review settings first');
-            setReviewStatus('error');
+            console.log("No settings found");
+            setError("Please configure your review settings first");
+            setReviewStatus("error");
             setIsSettingsLoading(false);
           }
         } catch (error) {
-          console.error('Error loading settings:', error);
-          setError('Failed to load settings');
-          setReviewStatus('error');
+          console.error("Error loading settings:", error);
+          setError("Failed to load settings");
+          setReviewStatus("error");
           setIsSettingsLoading(false);
         }
       };
 
       loadSettings();
     }
-  }, [session?.user?.id, status]);
+  }, [session?.user?.id, status, isGuestMode, searchParams]);
 
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
     if (!isSettingsLoading && settings) {
-      console.log('Settings loaded, loading ayahs with:', settings);
+      console.log("Settings loaded, loading ayahs with:", settings);
       loadAyahs();
     }
   }, [isSettingsLoading, settings]);
 
   const loadAyahs = async () => {
     if (!settings) {
-      console.log('No settings available, cannot load ayahs');
+      console.log("No settings available, cannot load ayahs");
       return;
     }
 
@@ -127,38 +157,45 @@ export default function ReviewPage() {
     setReviewStatus("loading");
     try {
       let response;
-      
+
       // Use the configured promptsPerSession or default to 20 if not set
       const count = settings.promptsPerSession || 20;
-      
-      console.log('Loading ayahs with settings:', settings);
-      
+
+      // Only use guest mode if user is not authenticated
+      const useGuestMode = isGuestMode && status !== "authenticated";
+
+      console.log("Loading ayahs with settings:", settings);
+
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
-          `/api/quran?action=review&juz=${juzParam}&count=${count}`,
+          `/api/quran?action=review&juz=${juzParam}&count=${count}${
+            useGuestMode ? "&guest=true" : ""
+          }`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
       } else {
         const surahParam = settings.selectedSurahs.join(",");
         response = await fetch(
-          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`,
+          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}${
+            useGuestMode ? "&guest=true" : ""
+          }`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
       }
-      
+
       const data = await response.json();
 
       if (!data.success || !data.ayahs || data.ayahs.length === 0) {
@@ -172,10 +209,24 @@ export default function ReviewPage() {
       // Load all data before updating state
       const ayahsWithSR = await Promise.all(
         data.ayahs.map(async (ayah: QuranAyah) => {
+          // Skip fetching spaced repetition data for guest mode
+          if (useGuestMode) {
+            return {
+              ...ayah,
+              interval: 1,
+              repetitions: 0,
+              easeFactor: 2.5,
+              lastReviewed: null,
+              dueDate: null,
+            };
+          }
+
           try {
-            const srResponse = await fetch(`/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`);
+            const srResponse = await fetch(
+              `/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`
+            );
             const srData = await srResponse.json();
-            
+
             if (srData.data) {
               return {
                 ...ayah,
@@ -214,29 +265,34 @@ export default function ReviewPage() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     if (!settings) {
-      console.log('No settings available, cannot load next ayahs');
+      console.log("No settings available, cannot load next ayahs");
       return;
     }
+
+    // Only use guest mode if user is not authenticated
+    const useGuestMode = isGuestMode && status !== "authenticated";
 
     try {
       // Only fetch previous ayahs if we're not at the start of a surah
       if (currentAyah.ayah_no_surah > 1) {
         const prevResponse = await fetch(
-          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`,
+          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${
+            currentAyah.ayah_no_surah
+          }&count=2${useGuestMode ? "&guest=true" : ""}`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
         const prevData = await prevResponse.json();
-        
+
         if (prevData.success && prevData.ayahs) {
           // Only include previous ayahs from the same surah
-          const sameSurahPrevAyahs = prevData.ayahs.filter((ayah: QuranAyah) => 
-            ayah.surah_no === currentAyah.surah_no
+          const sameSurahPrevAyahs = prevData.ayahs.filter(
+            (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
           );
           setPrevAyahs(sameSurahPrevAyahs);
         } else {
@@ -246,64 +302,34 @@ export default function ReviewPage() {
         // At the start of a surah, don't show any previous context
         setPrevAyahs([]);
       }
-      
+
       // If ayahsAfter is 0, don't fetch any next ayahs
       if (settings.ayahsAfter === 0) {
         setNextAyahs([]);
         return;
       }
-      
-      // First check if we need to respect surah boundaries
-      const surahCountResponse = await fetch(
-        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`,
+
+      const nextResponse = await fetch(
+        `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${
+          currentAyah.ayah_no_surah
+        }&count=${settings.ayahsAfter}${useGuestMode ? "&guest=true" : ""}`,
         {
           headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
         }
       );
-      const surahCountData = await surahCountResponse.json();
-      
-      if (surahCountData.success) {
-        // Calculate how many ayahs are remaining in this surah
-        const ayahsRemainingInSurah = surahCountData.count - currentAyah.ayah_no_surah;
-        
-        // Use the minimum of ayahsAfter and ayahsRemainingInSurah
-        const adjustedCount = Math.min(settings.ayahsAfter, ayahsRemainingInSurah);
-        
-        if (adjustedCount <= 0) {
-          setNextAyahs([]);
-          return;
-        }
-        
-        const response = await fetch(
-          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`,
-          {
-            headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
-          }
-        );
-        const data = await response.json();
+      const nextData = await nextResponse.json();
 
-        if (data.success && data.ayahs) {
-          // Only include next ayahs from the same surah
-          const sameSurahNextAyahs = data.ayahs.filter((ayah: QuranAyah) => 
-            ayah.surah_no === currentAyah.surah_no
-          );
-          setNextAyahs(sameSurahNextAyahs);
-        } else {
-          setNextAyahs([]);
-        }
+      if (nextData.success && nextData.ayahs) {
+        setNextAyahs(nextData.ayahs);
       } else {
         setNextAyahs([]);
       }
     } catch (error) {
-      console.error("Error loading ayahs:", error);
+      console.error("Error loading context ayahs:", error);
       setPrevAyahs([]);
       setNextAyahs([]);
     }
@@ -314,6 +340,23 @@ export default function ReviewPage() {
   };
 
   const handleRating = async (remembered: boolean) => {
+    // Skip spaced repetition updates for guest mode - only if not authenticated
+    if (isGuestMode && status !== "authenticated") {
+      // Just advance to the next question
+      setReviewedCount(reviewedCount + 1);
+
+      if (currentAyahIndex + 1 < reviewAyahs.length) {
+        await loadNextAyahs(reviewAyahs[currentAyahIndex + 1]);
+        setCurrentAyahIndex(currentAyahIndex + 1);
+        setShowArabic(false);
+        setShowTranslation(false);
+        setReviewStatus("question");
+      } else {
+        setReviewStatus("complete");
+      }
+      return;
+    }
+
     const currentAyah = reviewAyahs[currentAyahIndex];
 
     // Initialize spaced repetition values if they don't exist
@@ -342,10 +385,14 @@ export default function ReviewPage() {
       } else if (nextRepetitions === 2) {
         nextInterval = 6;
       } else {
-        nextInterval = Math.round(currentAyah.interval * currentAyah.easeFactor);
+        nextInterval = Math.round(
+          currentAyah.interval * currentAyah.easeFactor
+        );
       }
 
-      nextEaseFactor = currentAyah.easeFactor + (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
+      nextEaseFactor =
+        currentAyah.easeFactor +
+        (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
     }
 
     // Update the ayah with new spaced repetition values
@@ -362,9 +409,13 @@ export default function ReviewPage() {
     try {
       // Fix: Ensure date uses local timezone instead of UTC
       const now = new Date();
-      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const localDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
       const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-      
+
       const response = await fetch("/api/spaced-repetition", {
         method: "POST",
         headers: {
@@ -395,9 +446,13 @@ export default function ReviewPage() {
     try {
       // Fix: Ensure date uses local timezone instead of UTC
       const now = new Date();
-      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const localDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
       const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-      
+
       await fetch("/api/daily-logs", {
         method: "POST",
         headers: {
@@ -435,24 +490,22 @@ export default function ReviewPage() {
     loadAyahs();
   };
 
-  if (isSettingsLoading || isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p>{isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}</p>
-      </div>
-    );
-  }
-
+  // Modified rendering logic to prioritize showing errors over loading state
   if (reviewStatus === "error") {
     return (
       <Card className="text-center max-w-2xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-destructive">Error</CardTitle>
+          <CardTitle className="text-destructive">Setup Required</CardTitle>
         </CardHeader>
         <CardContent>
           <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <p className="mb-4">{error}</p>
+          {error?.includes("settings") && (
+            <p className="text-sm text-muted-foreground mb-4">
+              You need to configure your Quran review settings before you can
+              start reviewing.
+            </p>
+          )}
         </CardContent>
         <CardFooter className="flex justify-center">
           <Button variant="outline" onClick={resetReview} className="mr-2">
@@ -461,12 +514,38 @@ export default function ReviewPage() {
           </Button>
           <Link href="/setup">
             <Button>
-              Review Settings
+              Setup Review Settings
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
         </CardFooter>
       </Card>
+    );
+  }
+
+  if (isSettingsLoading || isLoading) {
+    // Add a timeout to prevent infinite loading for users without settings
+    useEffect(() => {
+      if (status === "authenticated" && !isGuestMode) {
+        const timer = setTimeout(() => {
+          if (isSettingsLoading) {
+            setError("Please configure your review settings first");
+            setReviewStatus("error");
+            setIsSettingsLoading(false);
+          }
+        }, 3000); // Show error after 3 seconds if still loading
+
+        return () => clearTimeout(timer);
+      }
+    }, [isSettingsLoading, status, isGuestMode]);
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p>
+          {isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}
+        </p>
+      </div>
     );
   }
 
@@ -504,7 +583,27 @@ export default function ReviewPage() {
   const currentAyah = reviewAyahs[currentAyahIndex];
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="container max-w-4xl px-4 py-6 mx-auto">
+      {isGuestMode && status !== "authenticated" && (
+        <Alert className="mb-4 bg-yellow-50 border-yellow-200">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span className="text-yellow-800">
+              You're in guest mode. Your progress won't be saved.
+            </span>
+            <Link href="/register">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-yellow-600 border-yellow-600 hover:bg-yellow-100"
+              >
+                Sign Up
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -523,9 +622,14 @@ export default function ReviewPage() {
               <div className="bg-muted/50 p-6 rounded-lg">
                 {prevAyahs.length > 0 && (
                   <div className="mb-6">
-                    <p className="text-base text-muted-foreground text-center mb-3 font-bold">Context (Previous Ayahs)</p>
+                    <p className="text-base text-muted-foreground text-center mb-3 font-bold">
+                      Context (Previous Ayahs)
+                    </p>
                     {prevAyahs.map((ayah, index) => (
-                      <div key={index} className="mb-3 border-b pb-3 last:border-b-0 last:pb-0">
+                      <div
+                        key={index}
+                        className="mb-3 border-b pb-3 last:border-b-0 last:pb-0"
+                      >
                         <p className="font-arabic text-center text-sm mb-1">
                           {ayah.ayah_ar}
                         </p>
@@ -533,7 +637,8 @@ export default function ReviewPage() {
                           {ayah.ayah_en}
                         </p>
                         <p className="text-center text-xs text-muted-foreground mt-1 font-bold">
-                          {ayah.surah_no} - {ayah.surah_name_roman} {ayah.ayah_no_surah}
+                          {ayah.surah_no} - {ayah.surah_name_roman}{" "}
+                          {ayah.ayah_no_surah}
                         </p>
                       </div>
                     ))}
@@ -542,7 +647,8 @@ export default function ReviewPage() {
                 )}
                 <div className="mb-4 text-center">
                   <span className="text-sm font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
-                    {currentAyah.surah_no} - Surah {currentAyah.surah_name_roman}
+                    {currentAyah.surah_no} - Surah{" "}
+                    {currentAyah.surah_name_roman}
                     {" - "}
                     Ayah {currentAyah.ayah_no_surah}
                   </span>
@@ -556,8 +662,8 @@ export default function ReviewPage() {
               </div>
               <div className="text-center">
                 <p className="mb-2 font-medium">
-                  Continue reciting the next {settings?.ayahsAfter || 0} ayahs from
-                  memory
+                  Continue reciting the next {settings?.ayahsAfter || 0} ayahs
+                  from memory
                 </p>
                 <p className="text-sm text-muted-foreground mb-6">
                   When you're ready, click the button below to check your answer
@@ -587,7 +693,8 @@ export default function ReviewPage() {
                         {currentAyah.ayah_en}
                       </p>
                       <p className="text-center text-xs text-muted-foreground mt-2">
-                        {currentAyah.surah_no} - {currentAyah.surah_name_roman} {currentAyah.ayah_no_surah}
+                        {currentAyah.surah_no} - {currentAyah.surah_name_roman}{" "}
+                        {currentAyah.ayah_no_surah}
                       </p>
                     </div>
 
@@ -600,7 +707,8 @@ export default function ReviewPage() {
                           {ayah.ayah_en}
                         </p>
                         <p className="text-center text-xs text-muted-foreground mt-2">
-                          {ayah.surah_no} - {ayah.surah_name_roman} {ayah.ayah_no_surah}
+                          {ayah.surah_no} - {ayah.surah_name_roman}{" "}
+                          {ayah.ayah_no_surah}
                         </p>
                       </div>
                     ))}
