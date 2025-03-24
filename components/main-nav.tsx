@@ -52,23 +52,27 @@ export function MainNav() {
     } else if (status === "unauthenticated") {
       setHasSettings(null); // Reset for non-logged in users
     }
-  }, [status, session?.user?.id]);
+  }, [status, session?.user?.id, pathname]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
   const handleNavigation = (href: string, e: React.MouseEvent) => {
-    // Only intercept clicks to the review page for authenticated users without settings
-    if (
-      href === "/review" &&
-      status === "authenticated" &&
-      hasSettings === false
-    ) {
-      e.preventDefault();
-      // Show alert and redirect to setup
-      alert("You need to configure your review settings first.");
-      router.push("/setup");
+    // We won't block navigation to the review page anymore
+    // The review page itself will handle showing appropriate error messages
+    // This removes the alert() popup and allows for a better user experience
+    
+    // Just refresh the settings check when navigation happens
+    if (status === "authenticated" && session?.user?.id) {
+      fetch("/api/settings")
+        .then(response => response.json())
+        .then(data => {
+          setHasSettings(!!data.settings);
+        })
+        .catch(error => {
+          console.error("Error checking settings:", error);
+        });
     }
   };
 

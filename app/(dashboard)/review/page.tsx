@@ -83,6 +83,8 @@ function ReviewPageContent() {
     promptsPerSession: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // New state to track if we've tried loading settings
+  const [settingsAttempted, setSettingsAttempted] = useState(false);
 
   // Get parameters from search params
   const juzParam = searchParams.get("juz") ? Number(searchParams.get("juz")) : 30;
@@ -131,7 +133,7 @@ function ReviewPageContent() {
             setIsSettingsLoading(false);
           } else {
             console.log("No settings found");
-            setError("Please configure your review settings first");
+            setError("Please configure your review settings to start reviewing");
             setReviewStatus("error");
             setIsSettingsLoading(false);
           }
@@ -140,6 +142,8 @@ function ReviewPageContent() {
           setError("Failed to load settings");
           setReviewStatus("error");
           setIsSettingsLoading(false);
+        } finally {
+          setSettingsAttempted(true);
         }
       };
 
@@ -160,7 +164,7 @@ function ReviewPageContent() {
     if ((isSettingsLoading || isLoading) && status === "authenticated" && !isGuestMode) {
       const timer = setTimeout(() => {
         if (isSettingsLoading) {
-          setError("Please configure your review settings first");
+          setError("Please configure your review settings to start reviewing");
           setReviewStatus("error");
           setIsSettingsLoading(false);
         }
@@ -596,17 +600,30 @@ function ReviewPageContent() {
     return (
       <Card className="text-center max-w-2xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-destructive">Setup Required</CardTitle>
+          <CardTitle className="text-primary">Settings Required</CardTitle>
+          <CardDescription>
+            Before you can begin your Quran review journey
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <p className="mb-4">{error}</p>
-          {error?.includes("settings") && (
-            <p className="text-sm text-muted-foreground mb-4">
-              You need to configure your Quran review settings before you can
-              start reviewing.
+          <div className="bg-primary/10 p-6 rounded-lg mb-4">
+            <AlertCircle className="h-12 w-12 text-primary mx-auto mb-4" />
+            <p className="mb-4 text-lg font-medium">{error}</p>
+            <p className="text-muted-foreground mb-4">
+              You need to configure which parts of the Quran you want to review and
+              how many verses you want to see at a time.
             </p>
-          )}
+          </div>
+          
+          {/* First-time setup instructions */}
+          <div className="text-left my-4 bg-muted/50 p-4 rounded-lg">
+            <h3 className="font-medium mb-2">What you'll need to configure:</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Select Juz (chapters) or Surahs to review</li>
+              <li>Choose how many verses to show after each prompt</li>
+              <li>Set how many prompts you want per review session</li>
+            </ul>
+          </div>
         </CardContent>
         <CardFooter className="flex justify-center">
           <Button variant="outline" onClick={resetReview} className="mr-2">
@@ -614,8 +631,8 @@ function ReviewPageContent() {
             Try Again
           </Button>
           <Link href="/setup">
-            <Button>
-              Setup Review Settings
+            <Button className="bg-primary hover:bg-primary/90">
+              Configure Settings
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
@@ -626,10 +643,15 @@ function ReviewPageContent() {
 
   if (isSettingsLoading || isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+      <div className="flex flex-col items-center justify-center min-h-[50vh] max-w-md mx-auto">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p>
-          {isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}
+        <p className="text-center mb-2 font-medium">
+          {isSettingsLoading ? "Loading your review settings..." : "Loading Quran data..."}
+        </p>
+        <p className="text-sm text-muted-foreground text-center px-4">
+          {isSettingsLoading 
+            ? "We're checking your preferences to prepare your personalized review session."
+            : "We're preparing the verses for your review session."}
         </p>
       </div>
     );
