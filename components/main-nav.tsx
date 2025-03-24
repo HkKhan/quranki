@@ -39,9 +39,28 @@ export function MainNav() {
     if (status === "authenticated" && session?.user?.id) {
       const checkUserSettings = async () => {
         try {
-          const response = await fetch("/api/settings");
+          const response = await fetch("/api/settings", {
+            // Add cache control headers to prevent caching
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0"
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error("Failed to load settings");
+          }
+          
           const data = await response.json();
-          setHasSettings(!!data.settings);
+          
+          // Check if settings exist and have valid selections
+          const hasValidSettings = data.settings && 
+            ((data.settings.selectionType === "juzaa" && data.settings.selectedJuzaa?.length > 0) || 
+             (data.settings.selectionType === "surah" && data.settings.selectedSurahs?.length > 0));
+          
+          console.log("Navbar settings check:", hasValidSettings, data.settings);
+          setHasSettings(hasValidSettings);
         } catch (error) {
           console.error("Error checking user settings:", error);
           setHasSettings(false);
@@ -53,6 +72,42 @@ export function MainNav() {
       setHasSettings(null); // Reset for non-logged in users
     }
   }, [status, session?.user?.id]);
+
+  // Refresh settings check when pathname changes, especially when coming from setup
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      // If we're navigating from setup page or dashboard, refresh settings check
+      const checkUserSettings = async () => {
+        try {
+          const response = await fetch("/api/settings", {
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0"
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error("Failed to load settings");
+          }
+          
+          const data = await response.json();
+          
+          // Check if settings exist and have valid selections
+          const hasValidSettings = data.settings && 
+            ((data.settings.selectionType === "juzaa" && data.settings.selectedJuzaa?.length > 0) || 
+             (data.settings.selectionType === "surah" && data.settings.selectedSurahs?.length > 0));
+          
+          console.log("Settings refresh on path change:", pathname, hasValidSettings);
+          setHasSettings(hasValidSettings);
+        } catch (error) {
+          console.error("Error checking user settings on path change:", error);
+        }
+      };
+
+      checkUserSettings();
+    }
+  }, [pathname, status, session?.user?.id]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -66,9 +121,14 @@ export function MainNav() {
       hasSettings === false
     ) {
       e.preventDefault();
-      // Show alert and redirect to setup
-      alert("You need to configure your review settings first.");
-      router.push("/setup");
+      // Provide a better user experience by using a more descriptive message
+      const confirmSetup = window.confirm(
+        "You need to configure your Quran review settings before you can start reviewing. Would you like to go to the setup page now?"
+      );
+      
+      if (confirmSetup) {
+        router.push("/setup");
+      }
     }
   };
 

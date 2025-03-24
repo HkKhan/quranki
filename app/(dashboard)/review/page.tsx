@@ -197,15 +197,15 @@ function ReviewPageContent() {
 
       console.log("Loading ayahs with settings:", settings);
 
-      // Add parameter to avoid end-of-surah ayahs when possible
-      const avoidEndParam = "&avoidEndOfSurah=true";
+      // Parameters to avoid selecting end-of-surah ayahs and explicitly exclude the last ayah
+      const avoidEndParams = "&avoidEndOfSurah=true&excludeLastAyah=true";
 
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
           `/api/quran?action=review&juz=${juzParam}&count=${count}${
             useGuestMode ? "&guest=true" : ""
-          }${avoidEndParam}`,
+          }${avoidEndParams}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -219,7 +219,7 @@ function ReviewPageContent() {
         response = await fetch(
           `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}${
             useGuestMode ? "&guest=true" : ""
-          }${avoidEndParam}`,
+          }${avoidEndParams}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -240,9 +240,58 @@ function ReviewPageContent() {
         return;
       }
 
+      // Additional client-side filtering to ensure we don't use last ayahs of surahs
+      // This is a fallback in case the API doesn't implement the excludeLastAyah parameter
+      const filteredAyahs = await Promise.all(
+        data.ayahs.map(async (ayah: QuranAyah) => {
+          // Check if this is the last ayah of the surah
+          try {
+            // Try to get the next ayah to see if this is the last one
+            const nextResponse = await fetch(
+              `/api/quran?action=next&surah=${ayah.surah_no}&ayah=${
+                ayah.ayah_no_surah
+              }&count=1${useGuestMode ? "&guest=true" : ""}`,
+              {
+                headers: {
+                  "Cache-Control": "no-cache, no-store, must-revalidate",
+                  Pragma: "no-cache",
+                  Expires: "0",
+                },
+              }
+            );
+            const nextData = await nextResponse.json();
+            
+            // If there are no next ayahs or the next ayah is from a different surah,
+            // this is the last ayah of the surah
+            const isLastAyah = !nextData.success || 
+                             !nextData.ayahs || 
+                             nextData.ayahs.length === 0 ||
+                             nextData.ayahs[0].surah_no !== ayah.surah_no;
+            
+            return {
+              ...ayah,
+              isLastAyah
+            };
+          } catch (error) {
+            // If there's an error, we'll assume it's not the last ayah
+            return {
+              ...ayah,
+              isLastAyah: false
+            };
+          }
+        })
+      );
+
+      // Filter out last ayahs of surahs
+      const validAyahs = filteredAyahs.filter((ayah: any) => !ayah.isLastAyah);
+      
+      // If we have no valid ayahs after filtering, just use the original ones
+      // This ensures we don't end up with an empty review session
+      const ayahsToUse = validAyahs.length > 0 ? validAyahs : data.ayahs;
+
       // Load all data before updating state
       const ayahsWithSR = await Promise.all(
-        data.ayahs.map(async (ayah: QuranAyah) => {
+        ayahsToUse.map(async (ayah: QuranAyah) => {
           // Skip fetching spaced repetition data for guest mode
           if (useGuestMode) {
             return {
@@ -769,10 +818,10 @@ function ReviewPageContent() {
                 ) : (
                   <div className="py-4">
                     <p className="text-center text-muted-foreground mb-2">
-                      This is the end of Surah {currentAyah.surah_name_roman}.
+                      This is the last ayah of Surah {currentAyah.surah_name_roman}.
                     </p>
                     <p className="text-center text-xs text-muted-foreground">
-                      Each review prompt stays within a single surah.
+                      Each review prompt stays within a single surah. There are no more ayahs to recite after this.
                     </p>
                   </div>
                 )}
