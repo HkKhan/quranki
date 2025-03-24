@@ -104,12 +104,6 @@ function ReviewPageContent() {
         try {
           // Only use guest mode settings if user is not authenticated
           if (isGuestMode && status !== "authenticated") {
-            console.log(
-              "Setting guest settings: juz",
-              juzParam,
-              "ayahsAfter",
-              ayahsAfterParam
-            );
             setSettings({
               selectedJuzaa: [juzParam],
               selectedSurahs: [],
@@ -122,7 +116,6 @@ function ReviewPageContent() {
           }
 
           // For authenticated users, always load their settings
-          console.log("Fetching user settings...");
           const response = await fetch("/api/settings", {
             // Add cache control to prevent caching settings
             headers: {
@@ -137,16 +130,14 @@ function ReviewPageContent() {
           }
           
           const data = await response.json();
-          console.log("Received settings:", data);
 
           if (data.settings && 
              ((data.settings.selectionType === "juzaa" && data.settings.selectedJuzaa?.length > 0) || 
               (data.settings.selectionType === "surah" && data.settings.selectedSurahs?.length > 0))) {
-            console.log("Setting user settings:", data.settings);
             setSettings(data.settings);
             setIsSettingsLoading(false);
           } else {
-            console.log("No settings found");
+            console.warn("No settings found");
             setError("Please configure your review settings to start reviewing");
             setReviewStatus("error");
             setIsSettingsLoading(false);
@@ -168,7 +159,6 @@ function ReviewPageContent() {
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
     if (!isSettingsLoading && settings) {
-      console.log("Settings loaded, loading ayahs with:", settings);
       loadAyahs();
     }
   }, [isSettingsLoading, settings]);
@@ -190,7 +180,7 @@ function ReviewPageContent() {
 
   const loadAyahs = async () => {
     if (!settings) {
-      console.log("No settings available, cannot load ayahs");
+      console.warn("No settings available, cannot load ayahs");
       return;
     }
 
@@ -204,8 +194,6 @@ function ReviewPageContent() {
 
       // Only use guest mode if user is not authenticated
       const useGuestMode = isGuestMode && status !== "authenticated";
-
-      console.log("Loading ayahs with settings:", settings);
 
       // Add parameter to avoid end-of-surah ayahs when possible
       const avoidEndParam = "&avoidEndOfSurah=true";
@@ -352,7 +340,7 @@ function ReviewPageContent() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     if (!settings) {
-      console.log("No settings available, cannot load next ayahs");
+      console.warn("No settings available, cannot load next ayahs");
       return;
     }
 
