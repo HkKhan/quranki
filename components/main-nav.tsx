@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { BookOpen, Menu, Moon, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,21 +18,62 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Image from "next/image";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState, useEffect } from "react";
 
 export function MainNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const { data: session, status } = useSession();
   const isLoading = status === "loading";
+  const [hasSettings, setHasSettings] = useState<boolean | null>(null);
 
   // After hydration, we can safely show the UI that depends on the theme
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Check if the user has configured settings
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      const checkUserSettings = async () => {
+        try {
+          const response = await fetch("/api/settings");
+          const data = await response.json();
+          setHasSettings(!!data.settings);
+        } catch (error) {
+          console.error("Error checking user settings:", error);
+          setHasSettings(false);
+        }
+      };
+
+      checkUserSettings();
+    } else if (status === "unauthenticated") {
+      setHasSettings(null); // Reset for non-logged in users
+    }
+  }, [status, session?.user?.id, pathname]);
+
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const handleNavigation = (href: string, e: React.MouseEvent) => {
+    // We won't block navigation to the review page anymore
+    // The review page itself will handle showing appropriate error messages
+    // This removes the alert() popup and allows for a better user experience
+    
+    // Just refresh the settings check when navigation happens
+    if (status === "authenticated" && session?.user?.id) {
+      fetch("/api/settings")
+        .then(response => response.json())
+        .then(data => {
+          setHasSettings(!!data.settings);
+        })
+        .catch(error => {
+          console.error("Error checking settings:", error);
+        });
+    }
   };
 
   const routes = [
@@ -80,11 +121,17 @@ export function MainNav() {
                   <Link
                     key={route.href}
                     href={route.href}
+                    onClick={(e) => handleNavigation(route.href, e)}
                     className={cn(
                       "text-sm font-medium py-2 transition-colors hover:text-primary",
                       route.active
                         ? "border-l-2 border-primary pl-3 text-foreground"
-                        : "text-foreground pl-4"
+                        : "text-foreground pl-4",
+                      route.href === "/review" &&
+                        status === "authenticated" &&
+                        hasSettings === false
+                        ? "text-muted-foreground hover:text-primary/70"
+                        : ""
                     )}
                   >
                     {route.label}
@@ -128,11 +175,17 @@ export function MainNav() {
             <Link
               key={route.href}
               href={route.href}
+              onClick={(e) => handleNavigation(route.href, e)}
               className={cn(
                 "text-sm font-medium transition-colors hover:text-primary",
                 route.active
                   ? "border-b-2 border-primary pb-2 text-foreground"
-                  : "text-foreground"
+                  : "text-foreground",
+                route.href === "/review" &&
+                  status === "authenticated" &&
+                  hasSettings === false
+                  ? "text-muted-foreground hover:text-primary/70"
+                  : ""
               )}
             >
               {route.label}
