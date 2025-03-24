@@ -197,12 +197,15 @@ function ReviewPageContent() {
 
       console.log("Loading ayahs with settings:", settings);
 
+      // Add parameter to avoid end-of-surah ayahs when possible
+      const avoidEndParam = "&avoidEndOfSurah=true";
+
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
           `/api/quran?action=review&juz=${juzParam}&count=${count}${
             useGuestMode ? "&guest=true" : ""
-          }`,
+          }${avoidEndParam}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -216,7 +219,7 @@ function ReviewPageContent() {
         response = await fetch(
           `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}${
             useGuestMode ? "&guest=true" : ""
-          }`,
+          }${avoidEndParam}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -340,10 +343,13 @@ function ReviewPageContent() {
         return;
       }
 
+      // Try to fetch more ayahs than needed to ensure we have enough from the same surah
+      const fetchCount = settings.ayahsAfter * 2; 
+      
       const nextResponse = await fetch(
         `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${
           currentAyah.ayah_no_surah
-        }&count=${settings.ayahsAfter}${useGuestMode ? "&guest=true" : ""}`,
+        }&count=${fetchCount}${useGuestMode ? "&guest=true" : ""}`,
         {
           headers: {
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -355,7 +361,19 @@ function ReviewPageContent() {
       const nextData = await nextResponse.json();
 
       if (nextData.success && nextData.ayahs) {
-        setNextAyahs(nextData.ayahs);
+        // Only include next ayahs from the same surah as the current ayah
+        const sameSurahNextAyahs = nextData.ayahs.filter(
+          (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
+        );
+        
+        // If we have at least one next ayah from the same surah, use those
+        // Otherwise, just set an empty array (no next ayahs)
+        setNextAyahs(sameSurahNextAyahs.slice(0, settings.ayahsAfter));
+        
+        // If we couldn't get enough ayahs from the same surah, log it
+        if (sameSurahNextAyahs.length < settings.ayahsAfter) {
+          console.log(`Only found ${sameSurahNextAyahs.length} ayahs from the same surah. Current ayah is near the end of Surah ${currentAyah.surah_no}`);
+        }
       } else {
         setNextAyahs([]);
       }
@@ -749,9 +767,14 @@ function ReviewPageContent() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground">
-                    No more ayahs available in this surah.
-                  </p>
+                  <div className="py-4">
+                    <p className="text-center text-muted-foreground mb-2">
+                      This is the end of Surah {currentAyah.surah_name_roman}.
+                    </p>
+                    <p className="text-center text-xs text-muted-foreground">
+                      Each review prompt stays within a single surah.
+                    </p>
+                  </div>
                 )}
               </div>
 
