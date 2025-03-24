@@ -123,11 +123,25 @@ function ReviewPageContent() {
 
           // For authenticated users, always load their settings
           console.log("Fetching user settings...");
-          const response = await fetch("/api/settings");
+          const response = await fetch("/api/settings", {
+            // Add cache control to prevent caching settings
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+              "Expires": "0"
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error("Failed to load settings");
+          }
+          
           const data = await response.json();
           console.log("Received settings:", data);
 
-          if (data.settings) {
+          if (data.settings && 
+             ((data.settings.selectionType === "juzaa" && data.settings.selectedJuzaa?.length > 0) || 
+              (data.settings.selectionType === "surah" && data.settings.selectedSurahs?.length > 0))) {
             console.log("Setting user settings:", data.settings);
             setSettings(data.settings);
             setIsSettingsLoading(false);
@@ -193,12 +207,15 @@ function ReviewPageContent() {
 
       console.log("Loading ayahs with settings:", settings);
 
+      // Add parameter to avoid end-of-surah ayahs when possible
+      const avoidEndParam = "&avoidEndOfSurah=true";
+
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
           `/api/quran?action=review&juz=${juzParam}&count=${count}${
             useGuestMode ? "&guest=true" : ""
-          }`,
+          }${avoidEndParam}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -212,7 +229,7 @@ function ReviewPageContent() {
         response = await fetch(
           `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}${
             useGuestMode ? "&guest=true" : ""
-          }`,
+          }${avoidEndParam}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -846,9 +863,14 @@ function ReviewPageContent() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground">
-                    No more ayahs available in this surah.
-                  </p>
+                  <div className="py-4">
+                    <p className="text-center text-muted-foreground mb-2">
+                      This is the end of Surah {currentAyah.surah_name_roman}.
+                    </p>
+                    <p className="text-center text-xs text-muted-foreground">
+                      Each review prompt stays within a single surah.
+                    </p>
+                  </div>
                 )}
               </div>
 
