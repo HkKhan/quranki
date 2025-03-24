@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -48,7 +48,18 @@ interface QuranAyah {
 
 type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 
-export default function ReviewPage() {
+// Create a loading component for Suspense
+function ReviewPageLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center h-screen">
+      <Loader2 className="w-12 h-12 animate-spin text-primary" />
+      <p className="mt-4 text-lg">Loading review...</p>
+    </div>
+  );
+}
+
+// Main review component that uses searchParams
+function ReviewPageContent() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
@@ -73,6 +84,10 @@ export default function ReviewPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Get parameters from search params
+  const juzParam = searchParams.get("juz") ? Number(searchParams.get("juz")) : 30;
+  const ayahsAfterParam = searchParams.get("ayahsAfter") ? Number(searchParams.get("ayahsAfter")) : 2;
+
   useEffect(() => {
     // Skip auth check for guest mode
     if (!isGuestMode && status === "unauthenticated") {
@@ -87,24 +102,17 @@ export default function ReviewPage() {
         try {
           // Only use guest mode settings if user is not authenticated
           if (isGuestMode && status !== "authenticated") {
-            const juz = searchParams.get("juz")
-              ? Number(searchParams.get("juz"))
-              : 30;
-            const ayahsAfter = searchParams.get("ayahsAfter")
-              ? Number(searchParams.get("ayahsAfter"))
-              : 2;
-
             console.log(
               "Setting guest settings: juz",
-              juz,
+              juzParam,
               "ayahsAfter",
-              ayahsAfter
+              ayahsAfterParam
             );
             setSettings({
-              selectedJuzaa: [juz],
+              selectedJuzaa: [juzParam],
               selectedSurahs: [],
               selectionType: "juzaa",
-              ayahsAfter,
+              ayahsAfter: ayahsAfterParam,
               promptsPerSession: 20,
             });
             setIsSettingsLoading(false);
@@ -137,7 +145,7 @@ export default function ReviewPage() {
 
       loadSettings();
     }
-  }, [session?.user?.id, status, isGuestMode, searchParams]);
+  }, [session?.user?.id, status, isGuestMode, juzParam, ayahsAfterParam]);
 
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
@@ -146,6 +154,21 @@ export default function ReviewPage() {
       loadAyahs();
     }
   }, [isSettingsLoading, settings]);
+
+  // Add a timeout to prevent infinite loading for users without settings
+  useEffect(() => {
+    if ((isSettingsLoading || isLoading) && status === "authenticated" && !isGuestMode) {
+      const timer = setTimeout(() => {
+        if (isSettingsLoading) {
+          setError("Please configure your review settings first");
+          setReviewStatus("error");
+          setIsSettingsLoading(false);
+        }
+      }, 3000); // Show error after 3 seconds if still loading
+
+      return () => clearTimeout(timer);
+    }
+  }, [isSettingsLoading, isLoading, status, isGuestMode]);
 
   const loadAyahs = async () => {
     if (!settings) {
@@ -256,7 +279,8 @@ export default function ReviewPage() {
       setReviewedCount(0);
       setReviewStatus("question");
     } catch (error) {
-      setError("Failed to load Quran data. Please try again later.");
+      console.error("Error loading ayahs:", error);
+      setError("Failed to load Quran data");
       setReviewStatus("error");
     } finally {
       setIsLoading(false);
@@ -524,21 +548,6 @@ export default function ReviewPage() {
   }
 
   if (isSettingsLoading || isLoading) {
-    // Add a timeout to prevent infinite loading for users without settings
-    useEffect(() => {
-      if (status === "authenticated" && !isGuestMode) {
-        const timer = setTimeout(() => {
-          if (isSettingsLoading) {
-            setError("Please configure your review settings first");
-            setReviewStatus("error");
-            setIsSettingsLoading(false);
-          }
-        }, 3000); // Show error after 3 seconds if still loading
-
-        return () => clearTimeout(timer);
-      }
-    }, [isSettingsLoading, status, isGuestMode]);
-
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
@@ -747,5 +756,14 @@ export default function ReviewPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Default export that wraps the component with Suspense
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={<ReviewPageLoading />}>
+      <ReviewPageContent />
+    </Suspense>
   );
 }
