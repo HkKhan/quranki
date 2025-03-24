@@ -229,9 +229,51 @@ function ReviewPageContent() {
         return;
       }
 
+      // Get information about last ayahs in each surah
+      // We'll use a simple fetch to get surah details
+      let surahDetails: Record<number, { totalAyahs: number }> = {};
+      
+      try {
+        // Make a single API call to get all surah info if needed
+        const surahInfoResponse = await fetch('/api/quran?action=surahDetails');
+        const surahInfoData = await surahInfoResponse.json();
+        
+        if (surahInfoData.success && surahInfoData.surahs) {
+          // Create a lookup object with surah number as key
+          surahInfoData.surahs.forEach((surah: any) => {
+            surahDetails[surah.surah_no] = { 
+              totalAyahs: surah.total_ayahs 
+            };
+          });
+        }
+      } catch (error) {
+        console.error("Could not fetch surah details:", error);
+        // Continue without this feature if fetch fails
+      }
+
+      // Filter out ayahs that are the last in their surah
+      let filteredAyahs = [...data.ayahs];
+      
+      if (Object.keys(surahDetails).length > 0) {
+        filteredAyahs = filteredAyahs.filter((ayah: QuranAyah) => {
+          const surahInfo = surahDetails[ayah.surah_no];
+          // If we have surah info, filter out last ayah of each surah
+          if (surahInfo) {
+            return ayah.ayah_no_surah < surahInfo.totalAyahs;
+          }
+          return true; // If we don't have surah info, include all ayahs
+        });
+      }
+      
+      // Ensure we have at least some ayahs left after filtering
+      if (filteredAyahs.length === 0 && data.ayahs.length > 0) {
+        console.warn("All ayahs were filtered out, using original set");
+        filteredAyahs = data.ayahs;
+      }
+
       // Load all data before updating state
       const ayahsWithSR = await Promise.all(
-        data.ayahs.map(async (ayah: QuranAyah) => {
+        filteredAyahs.map(async (ayah: QuranAyah) => {
           // Skip fetching spaced repetition data for guest mode
           if (useGuestMode) {
             return {
@@ -333,10 +375,41 @@ function ReviewPageContent() {
         return;
       }
 
+      // Get information about current surah to avoid spanning across surahs
+      let surahInfo: { totalAyahs: number } | null = null;
+      try {
+        const surahInfoResponse = await fetch(`/api/quran?action=surahInfo&surah=${currentAyah.surah_no}`);
+        const surahInfoData = await surahInfoResponse.json();
+        
+        if (surahInfoData.success && surahInfoData.surah) {
+          surahInfo = {
+            totalAyahs: surahInfoData.surah.total_ayahs
+          };
+        }
+      } catch (error) {
+        console.error("Could not fetch surah info:", error);
+        // Continue without this information if fetch fails
+      }
+
+      // Calculate how many ayahs we need to request based on position in surah
+      let requestCount = settings.ayahsAfter;
+      
+      // If we're close to the end of a surah, adjust count to avoid spanning
+      if (surahInfo && currentAyah.ayah_no_surah + settings.ayahsAfter >= surahInfo.totalAyahs) {
+        // Only get ayahs up to the second-to-last ayah in the surah
+        requestCount = Math.max(0, surahInfo.totalAyahs - currentAyah.ayah_no_surah - 1);
+        
+        if (requestCount <= 0) {
+          // If we're already at or near the end of the surah, don't fetch any next ayahs
+          setNextAyahs([]);
+          return;
+        }
+      }
+
       const nextResponse = await fetch(
         `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${
           currentAyah.ayah_no_surah
-        }&count=${settings.ayahsAfter}${useGuestMode ? "&guest=true" : ""}`,
+        }&count=${requestCount}${useGuestMode ? "&guest=true" : ""}`,
         {
           headers: {
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -348,7 +421,11 @@ function ReviewPageContent() {
       const nextData = await nextResponse.json();
 
       if (nextData.success && nextData.ayahs) {
-        setNextAyahs(nextData.ayahs);
+        // Filter to ensure we only get ayahs from the same surah
+        const sameSurahNextAyahs = nextData.ayahs.filter(
+          (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
+        );
+        setNextAyahs(sameSurahNextAyahs);
       } else {
         setNextAyahs([]);
       }
@@ -572,18 +649,42 @@ function ReviewPageContent() {
           <p className="mb-6">
             Great job! Consistent review helps strengthen your memorization.
           </p>
+          
+          {isGuestMode && status !== "authenticated" && (
+            <Alert className="mb-4 bg-blue-50 border-blue-200">
+              <AlertDescription className="text-blue-800">
+                Sign up for a free account to unlock full features including:
+                <ul className="list-disc pl-5 mt-2">
+                  <li>Track your progress over time</li>
+                  <li>Personalized spaced repetition</li>
+                  <li>Custom review settings</li>
+                  <li>Review history and statistics</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
         <CardFooter className="flex justify-center space-x-4">
           <Button variant="outline" onClick={resetReview}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Review More
           </Button>
-          <Link href="/dashboard">
-            <Button>
-              Back to Dashboard
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          
+          {isGuestMode && status !== "authenticated" ? (
+            <Link href="/register">
+              <Button>
+                Sign Up Now
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/dashboard">
+              <Button>
+                Back to Dashboard
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </CardFooter>
       </Card>
     );
