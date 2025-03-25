@@ -11,6 +11,33 @@ const nextConfig = {
     // Warning: This ignores TypeScript errors during build
     ignoreBuildErrors: true,
   },
+  reactStrictMode: true,
+  webpack: (config, { isServer }) => {
+    // Only include Node.js modules in the server-side bundle
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        dns: false,
+        child_process: false,
+        os: false,
+        path: false,
+        stream: false,
+        util: false,
+        crypto: false,
+      };
+    }
+    return config;
+  },
+  // Configured for Next.js 15.1
+  experimental: {
+    serverActions: {
+      // This is what used to be serverExternalPackages in Next.js 14
+      allowedExternalPackages: ["nodemailer"],
+    },
+  },
 };
 
 export default nextConfig;

@@ -285,6 +285,9 @@ export function MainNav() {
                   {session?.user?.name || session?.user?.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">Profile</Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
                     signOut({ callbackUrl: "https://quranki.com" })
