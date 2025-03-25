@@ -24,6 +24,11 @@ model User {
   spacedRepetition  SpacedRepetitionData[]
   dailyLogs         DailyLog[]
   bugs              Bug[]
+  lastActive        DateTime?            @default(now())
+  sentFriendRequests FriendRequest[]     @relation("SentFriendRequests")
+  receivedFriendRequests FriendRequest[] @relation("ReceivedFriendRequests")
+  friendsAsUser1    Friend[]             @relation("UserFriends")
+  friendsAsUser2    Friend[]             @relation("FriendUsers")
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 }
@@ -121,6 +126,35 @@ model Bug {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// Friend relationship models
+model Friend {
+  id        String   @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime @default(now())
+  user1     User     @relation("UserFriends", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User     @relation("FriendUsers", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model FriendRequest {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     String   @default("pending") // pending, accepted, declined
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  sender     User     @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
 } 
 
 
