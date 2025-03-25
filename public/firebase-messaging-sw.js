@@ -23,30 +23,27 @@ const messaging = firebase.messaging();
 
 // Service Worker Installation
 self.addEventListener('install', (event) => {
-  console.log('[firebase-messaging-sw.js] Service Worker installing.');
   self.skipWaiting(); // Activate worker immediately
 });
 
 // Service Worker Activation
 self.addEventListener('activate', (event) => {
-  console.log('[firebase-messaging-sw.js] Service Worker activating.');
   self.clients.claim(); // Take control of all clients
 });
 
 // Generic message handler
 self.addEventListener('message', (event) => {
-  console.log('[firebase-messaging-sw.js] Message event received:', event.data);
 });
 
 // Function to show notification
 function showNotification(payload) {
-  console.log('[firebase-messaging-sw.js] Showing notification for payload:', payload);
+
   
   const notificationTitle = payload.notification?.title || 'QuranKi Notification';
   const notificationOptions = {
     body: payload.notification?.body || 'You have a new notification from QuranKi',
-    icon: '/logo.png',
-    badge: '/logo.png',
+    icon: '/quranki-logo.ico',
+    badge: '/quranki-logo.png',
     data: payload.data || {},
     tag: payload.data?.type || 'default',
     renotify: true,
@@ -59,35 +56,27 @@ function showNotification(payload) {
     ],
     vibrate: [200, 100, 200],
   };
-
-  console.log('[firebase-messaging-sw.js] Notification options:', notificationOptions);
   
   return self.registration.showNotification(notificationTitle, notificationOptions)
     .then(() => {
-      console.log('[firebase-messaging-sw.js] Notification shown successfully');
     })
     .catch((error) => {
-      console.error('[firebase-messaging-sw.js] Error showing notification:', error);
     });
 }
 
 // Handle push events directly
 self.addEventListener('push', function(event) {
-  console.log('[firebase-messaging-sw.js] Push event received:', event);
   
   if (!event.data) {
-    console.log('[firebase-messaging-sw.js] Push event has no data');
     return;
   }
 
   try {
     const payload = event.data.json();
-    console.log('[firebase-messaging-sw.js] Push data:', payload);
     
     // Ensure the service worker stays active until the notification is shown
     event.waitUntil(showNotification(payload));
   } catch (error) {
-    console.error('[firebase-messaging-sw.js] Error processing push event:', error);
     
     // Try to show a basic notification even if parsing fails
     event.waitUntil(
@@ -102,13 +91,11 @@ self.addEventListener('push', function(event) {
 
 // Handle background messages through Firebase
 messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message:', payload);
   return showNotification(payload);
 });
 
 // Handle notification click event
 self.addEventListener('notificationclick', (event) => {
-  console.log('[firebase-messaging-sw.js] Notification click received:', event);
 
   const clickedNotification = event.notification;
   clickedNotification.close();

@@ -399,7 +399,6 @@ export default function ProfilePage() {
         try {
           const token = await requestNotificationPermission();
           if (token) {
-            console.log('FCM Token obtained:', token.substring(0, 10) + '...');
             // Save token to the server
             const response = await fetch('/api/profile/fcm-token', {
               method: 'POST',
@@ -412,10 +411,7 @@ export default function ProfilePage() {
             if (!response.ok) {
               throw new Error('Failed to save FCM token');
             }
-            
-            console.log('FCM token registered successfully');
           } else {
-            console.log('Failed to obtain FCM token - permission may have been denied');
           }
         } catch (error) {
           console.error('Error registering for push notifications:', error);

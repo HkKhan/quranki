@@ -52,7 +52,6 @@ export async function sendPushNotification({
   data = {}
 }: PushNotificationData): Promise<boolean> {
   try {
-    console.log('Starting push notification process for user:', userId);
     
     // Get the user's notification settings and FCM token
     const userSettings = await prisma.notificationSettings.findUnique({
@@ -65,12 +64,6 @@ export async function sendPushNotification({
     });
     
     if (!userSettings || !userSettings.optedIn || !userSettings.pushNotifications || !userSettings.fcmToken) {
-      console.log(`Push notification skipped for user ${userId}: `, {
-        hasSettings: !!userSettings,
-        optedIn: userSettings?.optedIn,
-        pushEnabled: userSettings?.pushNotifications,
-        hasFcmToken: !!userSettings?.fcmToken
-      });
       return false;
     }
     
@@ -88,11 +81,11 @@ export async function sendPushNotification({
       data,
       webpush: {
         fcmOptions: {
-          link: process.env.NEXTAUTH_URL || 'https://quranki.vercel.app',
+          link: process.env.NEXTAUTH_URL || 'https://quranki.com',
         },
         notification: {
-          icon: '/logo.png',
-          badge: '/logo.png',
+          icon: '/quranki-logo.ico',
+          badge: '/quranki-logo.png',
           actions: [
             {
               action: 'open_app',
@@ -104,7 +97,6 @@ export async function sendPushNotification({
     };
 
     const response = await messaging.send(message);
-    console.log('Push notification sent:', response);
     return true;
   } catch (error) {
     console.error('Error sending push notification:', error);
@@ -147,7 +139,6 @@ export async function sendBatchPushNotifications({
     });
 
     if (!userSettings.length) {
-      console.log('No eligible users for batch notifications');
       return { success: 0, failed: 0 };
     }
 
@@ -178,11 +169,11 @@ export async function sendBatchPushNotifications({
               data,
               webpush: {
                 fcmOptions: {
-                  link: process.env.NEXTAUTH_URL || 'https://quranki.vercel.app',
+                  link: process.env.NEXTAUTH_URL || 'https://quranki.com',
                 },
                 notification: {
-                  icon: '/logo.png',
-                  badge: '/logo.png',
+                  icon: '/quranki-logo.ico',
+                  badge: '/quranki-logo.png',
                   actions: [
                     {
                       action: 'open_app',
@@ -206,7 +197,6 @@ export async function sendBatchPushNotifications({
       successCount += batchSuccessCount;
       failedCount += (batchTokens.length - batchSuccessCount);
       
-      console.log(`Batch push notification result: ${batchSuccessCount} successful, ${batchTokens.length - batchSuccessCount} failed`);
     }
     
     return { success: successCount, failed: failedCount };

@@ -13,7 +13,7 @@ const inter = Inter({ subsets: ["latin"] });
 // Get the base URL for the application
 const baseUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
-  : "https://quranki.vercel.app";
+  : "https://quranki.com";
 
 export const metadata: Metadata = {
   title: {
@@ -106,10 +106,8 @@ export default function RootLayout({
               if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/firebase-messaging-sw.js')
                   .then(function(registration) {
-                    console.log('Firebase Service Worker registered with scope:', registration.scope);
                   })
                   .catch(function(error) {
-                    console.log('Firebase Service Worker registration failed:', error);
                   });
               }
             `,

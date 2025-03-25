@@ -20,7 +20,6 @@ export async function initializeFirebaseAdmin() {
         }),
       });
       
-      console.log('Firebase Admin SDK initialized successfully');
     } catch (error) {
       console.error('Error initializing Firebase Admin SDK:', error);
       throw error;
@@ -58,11 +57,11 @@ export async function sendPushNotification({
       data,
       webpush: {
         fcmOptions: {
-          link: process.env.NEXTAUTH_URL || 'https://quranki.vercel.app',
+          link: process.env.NEXTAUTH_URL || 'https://quranki.com',
         },
         notification: {
-          icon: '/logo.png',
-          badge: '/logo.png',
+          icon: '/quranki-logo.ico',
+          badge: '/quranki-logo.png',
           actions: [
             {
               action: 'open_app',
@@ -74,7 +73,6 @@ export async function sendPushNotification({
     };
 
     const response = await messaging.send(message);
-    console.log('Successfully sent message:', response);
     return true;
   } catch (error) {
     console.error('Error sending message:', error);
@@ -120,11 +118,11 @@ export async function sendMulticastPushNotification({
         data,
         webpush: {
           fcmOptions: {
-            link: process.env.NEXTAUTH_URL || 'https://quranki.vercel.app',
+            link: process.env.NEXTAUTH_URL || 'https://quranki.com',
           },
           notification: {
-            icon: '/logo.png',
-            badge: '/logo.png',
+            icon: '/quranki-logo.ico',
+            badge: '/quranki-logo.png',
             actions: [
               {
                 action: 'open_app',
@@ -155,7 +153,6 @@ export async function sendMulticastPushNotification({
       results.failure += batchFailure;
     }
 
-    console.log(`Successfully sent ${results.success} messages; failed to send ${results.failure} messages`);
     return results;
   } catch (error) {
     console.error('Error sending multicast messages:', error);

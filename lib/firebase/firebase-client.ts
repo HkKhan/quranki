@@ -29,7 +29,6 @@ let messaging: Messaging | null = null;
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   try {
     messaging = getMessaging(app);
-    console.log('Firebase Messaging initialized successfully');
   } catch (error) {
     console.error('Error initializing FCM:', error);
   }
@@ -37,7 +36,6 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
 // Request permission and get FCM token
 export async function requestNotificationPermission(): Promise<string | null> {
-  console.log('Requesting notification permission...');
   
   if (!messaging) {
     console.error('Firebase Messaging is not initialized');
@@ -47,18 +45,15 @@ export async function requestNotificationPermission(): Promise<string | null> {
   try {
     // Check if notification permission is already granted
     if (Notification.permission === 'granted') {
-      console.log('Notification permission already granted');
       return await getFCMToken();
     }
 
     // Request permission from the user
     const permission = await Notification.requestPermission();
-    console.log('Notification permission status:', permission);
     
     if (permission === 'granted') {
       return await getFCMToken();
     } else {
-      console.log('Notification permission denied by user');
       return null;
     }
   } catch (error) {
@@ -81,17 +76,14 @@ export async function getFCMToken(): Promise<string | null> {
   }
 
   try {
-    console.log('Getting FCM token...');
     // Get registration token. This requires the user to have allowed notifications
     const currentToken = await getToken(messaging, {
       vapidKey: vapidKey,
     });
 
     if (currentToken) {
-      console.log('FCM token obtained:', currentToken.substring(0, 10) + '...');
       return currentToken;
     } else {
-      console.log('No registration token available');
       return null;
     }
   } catch (error) {
@@ -109,7 +101,6 @@ export function setupOnMessage(callback: (payload: MessagePayload) => void) {
 
   try {
     return onMessage(messaging, (payload) => {
-      console.log('Message received in the foreground:', payload);
       callback(payload);
     });
   } catch (error) {

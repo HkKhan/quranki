@@ -67,7 +67,6 @@ export async function GET(request: Request) {
       const dailyUsers = await getUsersForNotification('dailyReminders');
       
       if (Array.isArray(dailyUsers) && dailyUsers.length > 0) {
-        console.log(`Sending daily reminders to ${dailyUsers.length} users`);
         
         // Process individual notifications
         for (const user of dailyUsers) {
@@ -93,7 +92,7 @@ export async function GET(request: Request) {
             body: 'Time for your daily Quran review. Keep your streak going!',
             data: {
               type: 'daily_reminder',
-              url: 'https://quranki.vercel.app/'
+              url: 'https://quranki.com/'
             }
           });
           
@@ -108,7 +107,6 @@ export async function GET(request: Request) {
       const riskUsers = await getUsersForNotification('streakReminders');
       
       if (Array.isArray(riskUsers) && riskUsers.length > 0) {
-        console.log(`Checking streak risk for ${riskUsers.length} users`);
         
         // Filter users who haven't had activity today but have streaks
         const usersAtRisk = [];
@@ -137,8 +135,6 @@ export async function GET(request: Request) {
           }
         }
         
-        console.log(`${usersAtRisk.length} users at risk of losing their streak`);
-        
         // Process individual notifications
         for (const user of usersAtRisk) {
           const success = await sendStreakRiskReminder({
@@ -161,7 +157,7 @@ export async function GET(request: Request) {
             body: 'Your Quran review streak is at risk! Complete today\'s review to keep it going.',
             data: {
               type: 'streak_risk',
-              url: 'https://quranki.vercel.app/'
+              url: 'https://quranki.com/'
             }
           });
           
@@ -177,7 +173,6 @@ export async function GET(request: Request) {
       const weeklyUsers = await getUsersForNotification('weeklyReminders');
       
       if (Array.isArray(weeklyUsers) && weeklyUsers.length > 0) {
-        console.log(`Sending weekly summaries to ${weeklyUsers.length} users`);
         
         // Calculate weekly reviews for each user
         const oneWeekAgo = new Date();
