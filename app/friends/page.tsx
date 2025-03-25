@@ -274,8 +274,8 @@ export default function FriendsPage() {
           description: `Friend request ${action === "accept" ? "accepted" : "declined"}`,
         });
         
-        // Fetch the updated data to ensure accuracy
-        fetchFriendsData();
+        // Refresh the page to update the UI completely, including the badge
+        router.refresh();
       } else {
         const data = await response.json();
         toast({

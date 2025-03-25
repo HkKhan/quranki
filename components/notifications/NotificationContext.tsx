@@ -61,7 +61,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           const isOnSetupPage = pathname === '/setup';
           setIsNewUser(isOnSetupPage);
 
-          console.log('Fetching notification prompt status...');
           const response = await fetch('/api/profile/notification-prompt');
           
           if (!response.ok) {
@@ -81,7 +80,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           let data: NotificationStatus;
           try {
             data = await response.json();
-            console.log('Notification status data:', data);
           } catch (parseError) {
             console.error('Error parsing notification status response:', parseError);
             return;
@@ -91,7 +89,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
           // If user has enabled notifications, they don't need to see the prompt
           if (hasEnabledNotifications) {
-            console.log('User has notifications enabled, not showing prompt');
             setHasSeenPrompt(true);
             setShowPrompt(false);
             return;
@@ -99,7 +96,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
           // For new users on setup page: always show if they haven't seen it
           if (isOnSetupPage && !seen) {
-            console.log('New user on setup page, showing notification prompt');
             setShowPrompt(true);
             setHasSeenPrompt(false);
             return;
@@ -107,7 +103,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           
           // For returning users on home page: show if they haven't seen it
           if (pathname === '/' && !seen) {
-            console.log('Returning user on home page, showing notification prompt');
             setShowPrompt(true);
             setHasSeenPrompt(false);
             return;
