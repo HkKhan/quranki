@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/auth';
 import { prisma } from '@/lib/prisma';
+import { sendEmailNotification } from '@/lib/notification';
 
 interface NotificationUpdateData {
   optedIn: boolean;
@@ -8,6 +9,20 @@ interface NotificationUpdateData {
   dailyReminders: boolean;
   weeklyReminders: boolean;
   streakReminders: boolean;
+}
+
+// Helper function to generate notification settings summary
+function getNotificationSummary(settings: NotificationUpdateData): string {
+  const enabledNotifications = [];
+  if (settings.dailyReminders) enabledNotifications.push('Daily Reminders');
+  if (settings.weeklyReminders) enabledNotifications.push('Weekly Summaries');
+  if (settings.streakReminders) enabledNotifications.push('Streak Alerts');
+  
+  if (enabledNotifications.length === 0) {
+    return 'No specific notification types selected.';
+  }
+  
+  return enabledNotifications.join(', ');
 }
 
 // GET - Fetch notification settings
@@ -23,7 +38,7 @@ export async function GET() {
     }
     
     try {
-      const settings = await prisma.notificationSettings.findUnique({
+      const settings = await prisma.NotificationSettings.findUnique({
         where: { userId: session.user.id }
       });
       
@@ -100,8 +115,13 @@ export async function POST(request: Request) {
     };
     
     try {
+      // Check if user already has notification settings
+      const existingSettings = await prisma.NotificationSettings.findUnique({
+        where: { userId: session.user.id }
+      });
+      
       // Use upsert to either create new settings or update existing ones
-      const settings = await prisma.notificationSettings.upsert({
+      const settings = await prisma.NotificationSettings.upsert({
         where: {
           userId: session.user.id
         },
@@ -121,6 +141,40 @@ export async function POST(request: Request) {
           streakReminders: updateData.streakReminders,
         }
       });
+      
+      // Send confirmation email
+      if (session.user.email) {
+        const isFirstTime = !existingSettings;
+        const notificationSummary = getNotificationSummary(settings);
+        
+        let emailSubject = isFirstTime 
+          ? 'Welcome to QuranKi Notifications!' 
+          : 'QuranKi Notification Settings Updated';
+        
+        let emailMessage = `Assalamu Alaikum${session.user.name ? ` ${session.user.name}` : ''},\n\n`;
+        
+        if (isFirstTime) {
+          emailMessage += `Thank you for signing up for QuranKi notifications! We're excited to help you stay consistent with your Quran practice.\n\n`;
+        } else {
+          emailMessage += `Your QuranKi notification settings have been updated successfully.\n\n`;
+        }
+        
+        if (settings.optedIn) {
+          emailMessage += `You will receive the following notifications:\n${notificationSummary}\n\n`;
+          emailMessage += `These notifications will be sent to: ${session.user.email}\n\n`;
+        } else {
+          emailMessage += `You have opted out of notifications. You can enable them again at any time from your profile settings.\n\n`;
+        }
+        
+        emailMessage += `You can update your notification preferences at any time from your QuranKi profile settings.\n\n`;
+        emailMessage += `Jazakallah khair,\nThe QuranKi Team`;
+        
+        await sendEmailNotification({
+          email: session.user.email,
+          subject: emailSubject,
+          message: emailMessage
+        });
+      }
       
       return NextResponse.json({ 
         success: true,
