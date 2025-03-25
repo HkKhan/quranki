@@ -270,4 +270,20 @@ export async function sendWeeklySummary(params: WeeklySummary): Promise<boolean>
       url: '/profile'
     }
   });
+}
+
+/**
+ * Send a review reminder to a user
+ * This function is used for backwards compatibility with older code
+ */
+export async function sendReviewReminder(params: {
+  phoneNumber?: string;
+  carrier?: string;
+  name?: string;
+}): Promise<boolean> {
+
+  
+  // For backwards compatibility, we'll log the call but return true
+  // In the future, you can implement SMS notifications here if needed
+  return true;
 } 

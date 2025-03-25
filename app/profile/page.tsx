@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +23,8 @@ interface NotificationSettings {
   streakReminders: boolean;
 }
 
-export default function ProfilePage() {
+// Separate component to handle the SearchParams hook
+function ProfileContent() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -732,5 +733,18 @@ export default function ProfilePage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Main component that wraps the ProfileContent with Suspense
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="container flex items-center justify-center min-h-[60vh]">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
+      </div>
+    }>
+      <ProfileContent />
+    </Suspense>
   );
 } 
