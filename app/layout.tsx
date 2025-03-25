@@ -38,6 +38,7 @@ export const metadata: Metadata = {
     },
   ],
   creator: "Quranki",
+  metadataBase: new URL("https://quranki.com"),
   openGraph: {
     type: "website",
     locale: "en_US",

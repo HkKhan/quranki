@@ -88,6 +88,11 @@ export function MainNav() {
       active: pathname === "/review",
     },
     {
+      href: "/friends",
+      label: "Friends",
+      active: pathname === "/friends",
+    },
+    {
       href: "/leaderboard",
       label: "Leaderboard",
       active: pathname === "/leaderboard",

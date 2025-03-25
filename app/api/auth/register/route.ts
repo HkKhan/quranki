@@ -7,6 +7,7 @@ const userSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  invitedBy: z.string().email('Invalid inviter email').optional().nullable(),
 });
 
 export async function POST(request: Request) {
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(body.password, 10);
 
+    // Create the user
     const user = await prisma.user.create({
       data: {
         name: body.name,
@@ -34,6 +36,28 @@ export async function POST(request: Request) {
         password: hashedPassword,
       },
     });
+
+    // Handle invitation if provided
+    if (body.invitedBy) {
+      try {
+        const inviter = await prisma.user.findUnique({
+          where: { email: body.invitedBy.toLowerCase() },
+        });
+
+        if (inviter) {
+          // Create friendship between the users
+          await prisma.friend.create({
+            data: {
+              user1Id: inviter.id,
+              user2Id: user.id,
+            },
+          });
+        }
+      } catch (friendError) {
+        console.error('Error creating friendship:', friendError);
+        // Don't fail registration if friendship creation fails
+      }
+    }
 
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;

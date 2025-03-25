@@ -24,11 +24,14 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
+  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge-custom";
 import { useTheme } from "next-themes";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface LeaderboardEntry {
   name: string;
@@ -50,7 +53,9 @@ interface LeaderboardResponse {
 
 export default function LeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [friendsLeaderboard, setFriendsLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [friendsLoading, setFriendsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
@@ -59,6 +64,8 @@ export default function LeaderboardPage() {
   const [sortBy, setSortBy] = useState<"currentStreak" | "totalAyahs">(
     "currentStreak"
   );
+  const { data: session, status } = useSession();
+  const router = useRouter();
 
   const fetchLeaderboard = async (
     page: number,
@@ -81,9 +88,42 @@ export default function LeaderboardPage() {
     }
   };
 
+  // Fetch friends leaderboard
+  const fetchFriendsLeaderboard = async (sortOption: string) => {
+    // Clear loading state if not authenticated
+    if (status !== "authenticated") {
+      setFriendsLoading(false);
+      return;
+    }
+    
+    try {
+      setFriendsLoading(true);
+      const response = await fetch(
+        `/api/leaderboard/friends?sortBy=${sortOption}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setFriendsLeaderboard(data.data || []);
+      } else {
+        console.error("Error fetching friends leaderboard:", await response.text());
+      }
+    } catch (error) {
+      console.error("Error fetching friends leaderboard:", error);
+    } finally {
+      setFriendsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchLeaderboard(currentPage, perPage, sortBy);
   }, [currentPage, perPage, sortBy]);
+
+  useEffect(() => {
+    if (activeTab === "friends" && status === "authenticated") {
+      fetchFriendsLeaderboard(sortBy);
+    }
+  }, [activeTab, sortBy, status, session?.user?.id]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -162,25 +202,211 @@ export default function LeaderboardPage() {
   // Render content based on active tab
   const renderTabContent = () => {
     if (activeTab === "friends") {
-      return (
-        <div className="flex flex-col items-center justify-center py-16 px-4">
-          <div className="bg-slate-100 dark:bg-slate-800 rounded-full p-6 mb-6">
-            <Clock className="h-12 w-12 text-slate-500 dark:text-slate-400" />
+      // Show login prompt for non-authenticated users
+      if (status !== "authenticated") {
+        return (
+          <div className="flex flex-col items-center justify-center py-16 px-4">
+            <div className="bg-slate-100 dark:bg-slate-800 rounded-full p-6 mb-6">
+              <Users className="h-12 w-12 text-slate-500 dark:text-slate-400" />
+            </div>
+            <h3 className="text-2xl font-bold mb-3 text-center">
+              Join Quranki to Connect with Friends
+            </h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center max-w-md mb-6">
+              Create an account to track your progress alongside friends and family. 
+              Compete on the leaderboard and motivate each other to memorize the Quran.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={() => router.push("/register")}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+              >
+                Sign Up
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/login")}
+              >
+                Login
+              </Button>
+            </div>
           </div>
-          <h3 className="text-2xl font-bold mb-3 text-center">
-            Friends Leaderboard Coming Soon!
-          </h3>
-          <p className="text-slate-600 dark:text-slate-400 text-center max-w-md mb-4">
-            We're working on bringing you the ability to compete with your
-            friends. Stay tuned for updates!
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => setActiveTab("global")}
-            className="mt-2"
-          >
-            Return to Global Leaderboard
-          </Button>
+        );
+      }
+
+      if (friendsLoading) {
+        return (
+          <div className="flex justify-center py-12">
+            <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
+          </div>
+        );
+      }
+
+      if (friendsLeaderboard.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center py-16 px-4">
+            <div className="bg-slate-100 dark:bg-slate-800 rounded-full p-6 mb-6">
+              <Users className="h-12 w-12 text-slate-500 dark:text-slate-400" />
+            </div>
+            <h3 className="text-2xl font-bold mb-3 text-center">
+              No Friends Found
+            </h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center max-w-md mb-4">
+              Add friends to see how you rank against them! Connect with others to compare your progress.
+            </p>
+            <Button
+              onClick={() => router.push("/friends")}
+              className="mt-2"
+            >
+              Find Friends
+            </Button>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-3 mt-2">
+          {friendsLeaderboard.map((entry, index) => {
+            const rank = index + 1;
+            const isTopThree = rank <= 3;
+            const isCurrentUser = entry.isCurrentUser;
+
+            return (
+              <div
+                key={index}
+                className={`
+                  relative flex items-center rounded-lg px-4 py-3.5
+                  ${
+                    isTopThree
+                      ? "bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-700 border-2"
+                      : "bg-white dark:bg-slate-800 border"
+                  }
+                  ${isCurrentUser ? "ring-2 ring-blue-500 dark:ring-blue-400" : ""}
+                  border-slate-200 dark:border-slate-700
+                  shadow-sm transition-all hover:shadow hover:bg-opacity-90
+                `}
+                style={{
+                  borderColor: isTopThree ? colors.primary : "",
+                  borderLeftWidth: isTopThree ? "4px" : "1px",
+                }}
+              >
+                {/* Rank number - styled differently for top 3 */}
+                {isTopThree ? (
+                  <div
+                    className={`
+                    flex h-10 w-10 shrink-0 items-center justify-center rounded-lg mr-3 shadow-md
+                    ${
+                      rank === 1
+                        ? "bg-gradient-to-br from-yellow-300 to-yellow-600 text-yellow-950"
+                        : rank === 2
+                        ? "bg-gradient-to-br from-slate-300 to-slate-500 text-slate-950"
+                        : "bg-gradient-to-br from-amber-400 to-amber-700 text-amber-950"
+                    }
+                  `}
+                  >
+                    <span className="text-lg font-bold">{rank}</span>
+                  </div>
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center mr-3">
+                    <span
+                      className="text-lg font-semibold"
+                      style={{ color: colors.primary }}
+                    >
+                      {rank}.
+                    </span>
+                  </div>
+                )}
+
+                {/* Name with rank icon for top 3 and position change */}
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center">
+                    <div className={`text-lg font-semibold truncate ${isCurrentUser ? "text-blue-600 dark:text-blue-400" : ""}`}>
+                      {entry.name}
+                      {isCurrentUser && <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded-full">You</span>}
+                    </div>
+                    {getRankIcon(rank)}
+                  </div>
+
+                  {/* Mobile view streak indicator */}
+                  <div className="md:hidden mt-1 flex items-center">
+                    <div
+                      className="mr-2 flex items-center gap-1 px-3 py-1 rounded-full overflow-hidden"
+                      style={{
+                        backgroundColor: colors.primary,
+                        fontWeight: "bold",
+                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                      }}
+                    >
+                      <span style={{ color: colors.secondary }}>
+                        {entry.currentStreak}
+                      </span>
+                      <Flame
+                        className="h-3.5 w-3.5"
+                        style={{ color: colors.secondary }}
+                      />
+                    </div>
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      Ayahs: {entry.totalAyahs}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Stats Section - Desktop */}
+                <div className="hidden md:flex items-center space-x-4 ml-auto">
+                  {/* Streak Badge */}
+                  <div className="flex flex-col items-end">
+                    <div
+                      className={`text-xs mb-1 font-bold uppercase ${
+                        isDarkMode ? "text-white" : "text-black"
+                      }`}
+                    >
+                      Streak
+                    </div>
+                    <div
+                      className="flex items-center gap-1 px-4 py-1.5 rounded-full"
+                      style={{
+                        backgroundColor: colors.primary,
+                        fontWeight: "bold",
+                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                      }}
+                    >
+                      <span style={{ color: colors.secondary }}>
+                        {entry.currentStreak}
+                      </span>
+                      <Flame
+                        className="h-3.5 w-3.5"
+                        style={{ color: colors.secondary }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Total Ayahs with Trophy */}
+                  <div className="flex flex-col items-end min-w-[100px]">
+                    <div
+                      className={`text-xs mb-1 font-bold uppercase ${
+                        isDarkMode ? "text-white" : "text-black"
+                      }`}
+                    >
+                      Total Ayahs
+                    </div>
+                    <div className="flex items-center">
+                      <span
+                        className={`font-bold text-lg ${
+                          isDarkMode ? "text-white" : "text-black"
+                        }`}
+                      >
+                        {entry.totalAyahs}
+                      </span>
+                      <Trophy
+                        className={`h-5 w-5 ml-1.5 ${getTrophyColor(rank)}`}
+                        fill={isTopThree ? "currentColor" : "none"}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       );
     }
@@ -476,7 +702,12 @@ export default function LeaderboardPage() {
                 className={`custom-tab ${
                   activeTab === "friends" ? "active" : ""
                 }`}
-                onClick={() => setActiveTab("friends")}
+                onClick={() => {
+                  setActiveTab("friends");
+                  if (status === "authenticated") {
+                    fetchFriendsLeaderboard(sortBy);
+                  }
+                }}
               >
                 <span className="mr-2 text-lg">🤝</span>
                 Friends
@@ -486,7 +717,7 @@ export default function LeaderboardPage() {
         </CardHeader>
 
         <CardContent className="px-3 pt-4 pb-6">
-          {loading ? (
+          {loading && activeTab === "global" ? (
             <div className="flex justify-center py-12">
               <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
             </div>
@@ -535,19 +766,17 @@ export default function LeaderboardPage() {
         }
 
         /* Dark mode styles */
-        @media (prefers-color-scheme: dark) {
-          .custom-tabs {
-            background-color: #2d2d2d;
-          }
+        :global(.dark) .custom-tabs {
+          background-color: #2d2d2d;
+        }
 
-          .custom-tab {
-            color: #b0b3b8;
-          }
+        :global(.dark) .custom-tab {
+          color: #b0b3b8;
+        }
 
-          .custom-tab.active {
-            background-color: #3a3b3c;
-            color: #e4e6eb;
-          }
+        :global(.dark) .custom-tab.active {
+          background-color: #3a3b3c;
+          color: #e4e6eb;
         }
       `}</style>
     </div>
