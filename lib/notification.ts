@@ -20,6 +20,8 @@ export async function sendEmailNotification({
   subject: string;
   message: string;
 }): Promise<boolean> {
+  console.log('Starting email notification process for:', email);
+  
   if (!email) {
     console.error('No email provided for notification');
     return false;
@@ -36,7 +38,20 @@ export async function sendEmailNotification({
       console.error('NOTIFICATION_API_KEY is not set');
       return false;
     }
+
+    // Log the environment for debugging (excluding sensitive data)
+    console.log('Email notification environment:', {
+      isDevelopment: process.env.NODE_ENV === 'development',
+      siteUrl,
+      hasApiKey: !!apiKey,
+      hasEmailConfig: !!process.env.NOTIFICATION_EMAIL,
+      hasEmailPassword: !!process.env.NOTIFICATION_EMAIL_PASSWORD,
+      apiUrl,
+      isBrowser,
+      messageLength: message.length
+    });
     
+    console.log('Sending request to email API...');
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -51,6 +66,12 @@ export async function sendEmailNotification({
       }),
     });
     
+    console.log('Received response from email API:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
       console.error('Failed to send email notification:', {
@@ -62,9 +83,13 @@ export async function sendEmailNotification({
     }
 
     const responseData = await response.json();
+    console.log('Email notification response:', responseData);
     return true;
   } catch (error) {
-    console.error('Error sending email notification:', error);
+    console.error('Error sending email notification:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return false;
   }
 }
