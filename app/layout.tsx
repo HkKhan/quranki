@@ -98,6 +98,23 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap"
           rel="stylesheet"
         />
+        
+        {/* Firebase initialization script */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                  .then(function(registration) {
+                    console.log('Firebase Service Worker registered with scope:', registration.scope);
+                  })
+                  .catch(function(error) {
+                    console.log('Firebase Service Worker registration failed:', error);
+                  });
+              }
+            `,
+          }}
+        />
       </head>
       <body
         className={`${inter.className} min-h-screen bg-background font-sans antialiased`}

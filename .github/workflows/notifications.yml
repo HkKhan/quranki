@@ -1,0 +1,64 @@
+name: QuranKi Notifications
+
+on:
+  schedule:
+    # Daily reminders at 8am UTC
+    - cron: '0 8 * * *'
+    # Streak risk reminders at 8pm UTC
+    - cron: '0 20 * * *'
+    # Weekly summaries on Sundays at 12pm UTC
+    - cron: '0 12 * * 0'
+  
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      notification_type:
+        description: 'Notification type to test'
+        required: true
+        default: 'daily'
+        type: 'choice'
+        options:
+          - daily
+          - streak_risk
+          - weekly
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get current UTC time
+        id: time
+        run: |
+          echo "UTC_HOUR=$(date -u +%H)" >> $GITHUB_ENV
+          echo "DAY_OF_WEEK=$(date -u +%u)" >> $GITHUB_ENV
+          echo "Current UTC time: $(date -u)"
+
+      - name: Send Daily Reminders
+        if: ${{ env.UTC_HOUR == '08' || github.event.inputs.notification_type == 'daily' }}
+        run: |
+          echo "Sending daily streak reminders..."
+          curl -X GET "${{ secrets.APP_URL }}/api/cron/streak-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}\n"
+          echo "Daily reminders completed"
+
+      - name: Send Streak Risk Reminders
+        if: ${{ env.UTC_HOUR == '20' || github.event.inputs.notification_type == 'streak_risk' }}
+        run: |
+          echo "Sending streak risk reminders..."
+          curl -X GET "${{ secrets.APP_URL }}/api/cron/streak-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}\n"
+          echo "Streak risk reminders completed"
+
+      - name: Send Weekly Summaries
+        if: ${{ env.UTC_HOUR == '12' && env.DAY_OF_WEEK == '7' || github.event.inputs.notification_type == 'weekly' }}
+        run: |
+          echo "Sending weekly summaries..."
+          curl -X GET "${{ secrets.APP_URL }}/api/cron/streak-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}\n"
+          echo "Weekly summaries completed" 

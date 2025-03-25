@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/auth';
 import { prisma } from '@/lib/prisma';
-import { sendEmailNotification } from '@/lib/notification';
 
 interface NotificationUpdateData {
   optedIn: boolean;
-  emailNotifications: boolean;
+  pushNotifications: boolean;
   dailyReminders: boolean;
   weeklyReminders: boolean;
   streakReminders: boolean;
@@ -38,15 +37,26 @@ export async function GET() {
     }
     
     try {
-      const settings = await prisma.NotificationSettings.findUnique({
-        where: { userId: session.user.id }
-      });
+      // Use raw query to get notification settings
+      const result = await prisma.$queryRaw`
+        SELECT 
+          "optedIn", 
+          "pushNotifications", 
+          "dailyReminders", 
+          "weeklyReminders", 
+          "streakReminders" 
+        FROM "NotificationSettings" 
+        WHERE "userId" = ${session.user.id}
+      `;
+      
+      // Check if we got any results
+      const userSettings = Array.isArray(result) && result.length > 0 ? result[0] : null;
       
       // Return empty settings if none exist yet
-      if (!settings) {
+      if (!userSettings) {
         return NextResponse.json({ 
           optedIn: false,
-          emailNotifications: true,
+          pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
           streakReminders: false
@@ -54,11 +64,11 @@ export async function GET() {
       }
       
       return NextResponse.json({ 
-        optedIn: settings.optedIn,
-        emailNotifications: settings.emailNotifications ?? true,
-        dailyReminders: settings.dailyReminders ?? false,
-        weeklyReminders: settings.weeklyReminders ?? false,
-        streakReminders: settings.streakReminders ?? false
+        optedIn: userSettings.optedIn,
+        pushNotifications: userSettings.pushNotifications ?? false,
+        dailyReminders: userSettings.dailyReminders ?? false,
+        weeklyReminders: userSettings.weeklyReminders ?? false,
+        streakReminders: userSettings.streakReminders ?? false
       });
     } catch (dbError) {
       console.error('Database error fetching notification settings:', dbError);
@@ -66,7 +76,7 @@ export async function GET() {
         { 
           error: 'Database error fetching notification settings',
           optedIn: false,
-          emailNotifications: true,
+          pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
           streakReminders: false
@@ -80,7 +90,7 @@ export async function GET() {
       { 
         error: 'Failed to fetch notification settings',
         optedIn: false,
-        emailNotifications: true,
+        pushNotifications: false,
         dailyReminders: false,
         weeklyReminders: false,
         streakReminders: false
@@ -103,91 +113,81 @@ export async function POST(request: Request) {
     }
     
     const data = await request.json();
-    const { optedIn, emailNotifications, dailyReminders, weeklyReminders, streakReminders } = data;
+    const { optedIn, pushNotifications, dailyReminders, weeklyReminders, streakReminders } = data;
     
     // Prepare data for upsert operation
     const updateData: NotificationUpdateData = {
       optedIn: optedIn ?? false,
-      emailNotifications: emailNotifications ?? true,
+      pushNotifications: pushNotifications ?? false,
       dailyReminders: dailyReminders ?? false,
       weeklyReminders: weeklyReminders ?? false,
       streakReminders: streakReminders ?? false
     };
     
     try {
-      // Check if user already has notification settings
-      const existingSettings = await prisma.NotificationSettings.findUnique({
-        where: { userId: session.user.id }
-      });
+      // Check if settings already exist for this user
+      const existingSettings = await prisma.$queryRaw`
+        SELECT COUNT(*) as count FROM "NotificationSettings" WHERE "userId" = ${session.user.id}
+      `;
       
-      // Use upsert to either create new settings or update existing ones
-      const settings = await prisma.NotificationSettings.upsert({
-        where: {
-          userId: session.user.id
-        },
-        update: {
-          optedIn: updateData.optedIn,
-          emailNotifications: updateData.emailNotifications,
-          dailyReminders: updateData.dailyReminders,
-          weeklyReminders: updateData.weeklyReminders,
-          streakReminders: updateData.streakReminders,
-        },
-        create: {
-          userId: session.user.id,
-          optedIn: updateData.optedIn,
-          emailNotifications: updateData.emailNotifications,
-          dailyReminders: updateData.dailyReminders,
-          weeklyReminders: updateData.weeklyReminders,
-          streakReminders: updateData.streakReminders,
-        }
-      });
+      const hasExistingSettings = Array.isArray(existingSettings) && 
+                                existingSettings.length > 0 && 
+                                existingSettings[0].count > 0;
       
-      // Send confirmation email
-      if (session.user.email) {
-        const isFirstTime = !existingSettings;
-        const notificationSummary = getNotificationSummary(settings);
-        
-        let emailSubject = isFirstTime 
-          ? 'Welcome to QuranKi Notifications!' 
-          : 'QuranKi Notification Settings Updated';
-        
-        let emailMessage = `Assalamu Alaikum${session.user.name ? ` ${session.user.name}` : ''},\n\n`;
-        
-        if (isFirstTime) {
-          emailMessage += `Thank you for signing up for QuranKi notifications! We're excited to help you stay consistent with your Quran practice.\n\n`;
-        } else {
-          emailMessage += `Your QuranKi notification settings have been updated successfully.\n\n`;
-        }
-        
-        if (settings.optedIn) {
-          emailMessage += `You will receive the following notifications:\n${notificationSummary}\n\n`;
-          emailMessage += `These notifications will be sent to: ${session.user.email}\n\n`;
-        } else {
-          emailMessage += `You have opted out of notifications. You can enable them again at any time from your profile settings.\n\n`;
-        }
-        
-        emailMessage += `You can update your notification preferences at any time from your QuranKi profile settings.\n\n`;
-        emailMessage += `Jazakallah khair,\nThe QuranKi Team`;
-        
-        await sendEmailNotification({
-          email: session.user.email,
-          subject: emailSubject,
-          message: emailMessage
-        });
+      if (hasExistingSettings) {
+        // Update existing settings
+        await prisma.$executeRaw`
+          UPDATE "NotificationSettings"
+          SET 
+            "optedIn" = ${updateData.optedIn},
+            "pushNotifications" = ${updateData.pushNotifications},
+            "dailyReminders" = ${updateData.dailyReminders},
+            "weeklyReminders" = ${updateData.weeklyReminders},
+            "streakReminders" = ${updateData.streakReminders},
+            "updatedAt" = NOW()
+          WHERE "userId" = ${session.user.id}
+        `;
+      } else {
+        // Create new settings
+        await prisma.$executeRaw`
+          INSERT INTO "NotificationSettings"
+          ("id", "userId", "optedIn", "pushNotifications", "dailyReminders", "weeklyReminders", "streakReminders", "createdAt", "updatedAt")
+          VALUES
+          (gen_random_uuid(), ${session.user.id}, ${updateData.optedIn}, ${updateData.pushNotifications}, 
+           ${updateData.dailyReminders}, ${updateData.weeklyReminders}, ${updateData.streakReminders},
+           NOW(), NOW())
+        `;
       }
+      
+      // Get the updated settings
+      const updatedSettingsResult = await prisma.$queryRaw`
+        SELECT 
+          "optedIn", 
+          "pushNotifications", 
+          "dailyReminders", 
+          "weeklyReminders", 
+          "streakReminders" 
+        FROM "NotificationSettings" 
+        WHERE "userId" = ${session.user.id}
+      `;
+      
+      // Use the updated settings if available, otherwise use the update data
+      const updatedSettings = Array.isArray(updatedSettingsResult) && updatedSettingsResult.length > 0 
+        ? updatedSettingsResult[0] 
+        : updateData;
       
       return NextResponse.json({ 
         success: true,
-        optedIn: settings.optedIn,
-        emailNotifications: settings.emailNotifications,
-        dailyReminders: settings.dailyReminders,
-        weeklyReminders: settings.weeklyReminders,
-        streakReminders: settings.streakReminders
+        optedIn: updatedSettings.optedIn,
+        pushNotifications: updatedSettings.pushNotifications,
+        dailyReminders: updatedSettings.dailyReminders,
+        weeklyReminders: updatedSettings.weeklyReminders,
+        streakReminders: updatedSettings.streakReminders
       });
-    } catch (prismaError) {
-      console.error('Database error updating notification settings:', prismaError);
+    } catch (dbError) {
+      console.error('Database error updating notification settings:', dbError);
       return NextResponse.json(
-        { error: 'Database error while updating notification settings' },
+        { error: 'Database error updating notification settings' },
         { status: 500 }
       );
     }

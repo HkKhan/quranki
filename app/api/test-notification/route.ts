@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/auth';
-import { 
-  sendDailyStreakReminder, 
-  sendStreakRiskReminder, 
-  sendWeeklySummary, 
-  sendEmailNotification 
-} from '@/lib/notification';
+import { sendPushNotification } from '@/lib/notification';
+import { prisma } from '@/lib/prisma';
 
 // POST endpoint for test notifications
 export async function POST(request: Request) {
@@ -28,21 +24,43 @@ export async function POST(request: Request) {
       );
     }
     
-    // Get user email from session
-    const userEmail = session.user.email;
+    // Get user FCM token
     const userName = session.user.name || 'Test User';
     
-    if (!userEmail) {
-      return NextResponse.json(
-        { error: 'No email address found in your profile' },
-        { status: 400 }
-      );
+    // Get user notification settings
+    const notificationSettings = await prisma.notificationSettings.findUnique({
+      where: { userId: session.user.id },
+      select: { 
+        optedIn: true, 
+        pushNotifications: true, 
+        fcmToken: true 
+      }
+    });
+
+    // Check if push notifications are enabled
+    if (!notificationSettings?.optedIn || !notificationSettings?.pushNotifications) {
+      return NextResponse.json({
+        success: false,
+        message: 'You have not enabled push notifications. Please enable them in your profile settings.',
+        notificationSettings: {
+          optedIn: notificationSettings?.optedIn,
+          pushEnabled: notificationSettings?.pushNotifications,
+          hasFcmToken: !!notificationSettings?.fcmToken
+        }
+      }, { status: 400 });
     }
 
-    // Send a test notification with all three types of content
-    const testMessage = `
-Assalamu Alaikum ${userName},
+    // Check if FCM token exists
+    if (!notificationSettings.fcmToken) {
+      return NextResponse.json({
+        success: false,
+        message: 'No FCM token found. Please reload the page and allow notifications when prompted.',
+      }, { status: 400 });
+    }
 
+    // Create test notification message
+    const testTitle = 'QuranKi Test Notification';
+    const testMessage = `
 This is a TEST notification from QuranKi. 
 
 Here's a sample of the different types of notifications you might receive:
@@ -60,27 +78,31 @@ Your streak is at risk! You have approximately 4 hours to complete today's revie
 
 Keep up the great work! Remember, consistency is key to memorizing and maintaining your Quran knowledge.
 
-Login to QuranKi to continue your journey: https://quranki.vercel.app/
-
 This is a test message sent at ${new Date().toLocaleString()}.
-
-Jazakallah khair,
-The QuranKi Team
     `;
 
-    const success = await sendEmailNotification({
-      email: userEmail,
-      subject: 'QuranKi Test Notification',
-      message: testMessage
+    // Send push notification
+    const success = await sendPushNotification({
+      userId: session.user.id,
+      title: testTitle,
+      body: 'This is a test push notification from QuranKi. Tap to see more details.',
+      data: {
+        type: 'test',
+        message: testMessage.substring(0, 100) + '...',
+        timestamp: new Date().toISOString()
+      }
     });
 
     if (success) {
       return NextResponse.json({ 
         success: true,
-        message: 'Test notification sent successfully' 
+        message: 'Test push notification sent successfully'
       });
     } else {
-      throw new Error('Failed to send test notification');
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to send test notification. Please check your browser notification settings.',
+      }, { status: 500 });
     }
   } catch (error) {
     console.error('Error sending test notification:', error);

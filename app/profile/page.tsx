@@ -17,7 +17,7 @@ import Link from 'next/link';
 
 interface NotificationSettings {
   optedIn: boolean;
-  emailNotifications: boolean;
+  pushNotifications: boolean;
   dailyReminders: boolean;
   weeklyReminders: boolean;
   streakReminders: boolean;
@@ -42,7 +42,7 @@ export default function ProfilePage() {
 
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
     optedIn: false,
-    emailNotifications: true,
+    pushNotifications: false,
     dailyReminders: false,
     weeklyReminders: false,
     streakReminders: false,
@@ -169,7 +169,7 @@ export default function ProfilePage() {
         // Set default values on error
         setNotificationSettings({
           optedIn: false,
-          emailNotifications: true,
+          pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
           streakReminders: false,
@@ -180,7 +180,7 @@ export default function ProfilePage() {
       if (response.status === 204) {
         setNotificationSettings({
           optedIn: false,
-          emailNotifications: true,
+          pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
           streakReminders: false,
@@ -193,7 +193,7 @@ export default function ProfilePage() {
       if (!text) {
         setNotificationSettings({
           optedIn: false,
-          emailNotifications: true,
+          pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
           streakReminders: false,
@@ -205,7 +205,7 @@ export default function ProfilePage() {
         const data = JSON.parse(text);
         setNotificationSettings({
           optedIn: data.optedIn ?? false,
-          emailNotifications: data.emailNotifications ?? true,
+          pushNotifications: data.pushNotifications ?? false,
           dailyReminders: data.dailyReminders ?? false,
           weeklyReminders: data.weeklyReminders ?? false,
           streakReminders: data.streakReminders ?? false,
@@ -214,17 +214,18 @@ export default function ProfilePage() {
         // Set default values on parsing error
         setNotificationSettings({
           optedIn: false,
-          emailNotifications: true,
+          pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
           streakReminders: false,
         });
       }
-    } catch (err) {
-      // Set default values on any error
+    } catch (error) {
+      console.error('Error fetching notification settings:', error);
+      // set default values on fetch error
       setNotificationSettings({
         optedIn: false,
-        emailNotifications: true,
+        pushNotifications: false,
         dailyReminders: false,
         weeklyReminders: false,
         streakReminders: false,
@@ -352,7 +353,7 @@ export default function ProfilePage() {
         },
         body: JSON.stringify({
           optedIn: notificationSettings.optedIn,
-          emailNotifications: notificationSettings.emailNotifications,
+          pushNotifications: notificationSettings.pushNotifications,
           dailyReminders: notificationSettings.dailyReminders,
           weeklyReminders: notificationSettings.weeklyReminders,
           streakReminders: notificationSettings.streakReminders,
@@ -386,6 +387,44 @@ export default function ProfilePage() {
       [name]: value,
     });
   };
+
+  // Import the FCM token request function
+  const { requestNotificationPermission } = require('@/lib/firebase/firebase-client');
+
+  // Request notification permission and register FCM token when user enables push notifications
+  useEffect(() => {
+    // Only attempt to register FCM token if user has opted in to push notifications
+    if (notificationSettings.optedIn && notificationSettings.pushNotifications) {
+      const registerFCMToken = async () => {
+        try {
+          const token = await requestNotificationPermission();
+          if (token) {
+            console.log('FCM Token obtained:', token.substring(0, 10) + '...');
+            // Save token to the server
+            const response = await fetch('/api/profile/fcm-token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ token }),
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to save FCM token');
+            }
+            
+            console.log('FCM token registered successfully');
+          } else {
+            console.log('Failed to obtain FCM token - permission may have been denied');
+          }
+        } catch (error) {
+          console.error('Error registering for push notifications:', error);
+        }
+      };
+      
+      registerFCMToken();
+    }
+  }, [notificationSettings.optedIn, notificationSettings.pushNotifications]);
 
   if (status === 'loading') {
     return (
@@ -583,7 +622,7 @@ export default function ProfilePage() {
                   <div className="space-y-1">
                     <Label htmlFor="notifications">Receive Notifications</Label>
                     <p className="text-sm text-muted-foreground">
-                      Get reminders for your Quran review sessions via email.
+                      Get reminders for your Quran review sessions as push notifications.
                     </p>
                   </div>
                   <Switch
@@ -598,6 +637,34 @@ export default function ProfilePage() {
                 
                 {notificationSettings.optedIn && (
                   <div className="space-y-4 border-t pt-4">
+                    <div>
+                      <h3 className="font-medium mb-2">Push Notifications</h3>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Enable browser notifications to receive reminders directly on your device.
+                      </p>
+                      
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="pushNotifications"
+                            checked={notificationSettings.pushNotifications}
+                            onCheckedChange={(checked) => 
+                              setNotificationSettings(prev => ({
+                                ...prev,
+                                pushNotifications: checked
+                              }))
+                            }
+                          />
+                          <Label htmlFor="pushNotifications" className="font-medium cursor-pointer">
+                            Browser Push Notifications
+                          </Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground ml-8">
+                          Receive notifications in your browser (recommended)
+                        </p>
+                      </div>
+                    </div>
+                    
                     <div>
                       <h3 className="font-medium mb-2">Notification Types</h3>
                       <p className="text-sm text-muted-foreground mb-3">
@@ -690,19 +757,17 @@ export default function ProfilePage() {
                                 method: 'POST',
                                 headers: {
                                   'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                  email: session?.user?.email,
-                                }),
+                                }
                               });
                               
                               if (!response.ok) {
-                                throw new Error('Failed to send test notification');
+                                const errorData = await response.json();
+                                throw new Error(errorData.error || errorData.message || 'Failed to send test notification');
                               }
                               
                               setSuccess('Test notification sent successfully!');
-                            } catch (err) {
-                              setError('Failed to send test notification');
+                            } catch (err: any) {
+                              setError(err.message || 'Failed to send test notification');
                               console.error(err);
                             } finally {
                               setLoading(false);
@@ -712,7 +777,7 @@ export default function ProfilePage() {
                           Send Test Notification
                         </Button>
                         <p className="text-xs text-muted-foreground mt-2">
-                          This will send a test email to your registered email address.
+                          This will send a test push notification to your browser.
                           Only visible in development mode.
                         </p>
                       </div>

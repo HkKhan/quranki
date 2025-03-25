@@ -1,5 +1,37 @@
-// Helper to check if we're in a browser environment
-const isBrowser = typeof window !== 'undefined';
+import { isBrowser } from '@/lib/utils';
+import { sendPushNotification as sendFCMNotification, sendMulticastPushNotification } from '@/lib/firebase/firebase-admin';
+import { prisma } from './prisma';
+import { Prisma } from '@prisma/client';
+import { initializeFirebaseAdmin } from './firebase/firebase-admin';
+import { getMessaging } from 'firebase-admin/messaging';
+
+type PushNotificationData = {
+  userId: string;
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+};
+
+type StreakReminder = {
+  userId: string;
+  name?: string | null;
+  currentStreak: number;
+  hoursRemaining: number;
+};
+
+type DailyStreakReminder = {
+  userId: string;
+  name?: string | null;
+  currentStreak: number;
+};
+
+type WeeklySummary = {
+  userId: string;
+  name?: string | null;
+  currentStreak: number;
+  weeklyReviews: number;
+  totalReviews: number;
+};
 
 /**
  * Generate a random verification code
@@ -9,190 +41,244 @@ export function generateVerificationCode(): string {
 }
 
 /**
- * Send an email notification to a user
+ * Sends a push notification to a user
+ * @param options Push notification data
+ * @returns boolean indicating success
  */
-export async function sendEmailNotification({
-  email,
-  subject,
-  message
-}: {
-  email: string;
-  subject: string;
-  message: string;
-}): Promise<boolean> {
-  console.log('Starting email notification process for:', email);
-  
-  if (!email) {
-    console.error('No email provided for notification');
-    return false;
-  }
-
+export async function sendPushNotification({
+  userId,
+  title,
+  body,
+  data = {}
+}: PushNotificationData): Promise<boolean> {
   try {
-    // Server-side: Use our email API to send the email
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    const apiUrl = isBrowser ? '/api/send-email' : `${siteUrl}/api/send-email`;
+    console.log('Starting push notification process for user:', userId);
     
-    // Get the API key - handle both client and server side contexts
-    const apiKey = process.env.NOTIFICATION_API_KEY;
-    if (!apiKey) {
-      console.error('NOTIFICATION_API_KEY is not set');
-      return false;
-    }
-
-    // Log the environment for debugging (excluding sensitive data)
-    console.log('Email notification environment:', {
-      isDevelopment: process.env.NODE_ENV === 'development',
-      siteUrl,
-      hasApiKey: !!apiKey,
-      hasEmailConfig: !!process.env.NOTIFICATION_EMAIL,
-      hasEmailPassword: !!process.env.NOTIFICATION_EMAIL_PASSWORD,
-      apiUrl,
-      isBrowser,
-      messageLength: message.length
-    });
+    // Get the user's notification settings and FCM token
+    const notificationSettings = await prisma.$queryRaw`
+      SELECT "fcmToken", "optedIn", "pushNotifications" 
+      FROM "NotificationSettings" 
+      WHERE "userId" = ${userId}
+    `;
     
-    console.log('Sending request to email API...');
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': apiKey,
-      },
-      body: JSON.stringify({
-        to: email,
-        subject,
-        text: message,
-        from: `"QuranKi" <${process.env.NOTIFICATION_EMAIL || 'contactquranki@gmail.com'}>`,
-      }),
-    });
+    const userSettings = Array.isArray(notificationSettings) && notificationSettings.length > 0 
+      ? notificationSettings[0] 
+      : null;
     
-    console.log('Received response from email API:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      console.error('Failed to send email notification:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorData
+    if (!userSettings || !userSettings.optedIn || !userSettings.pushNotifications || !userSettings.fcmToken) {
+      console.log(`Push notification skipped for user ${userId}: `, {
+        hasSettings: !!userSettings,
+        optedIn: userSettings?.optedIn,
+        pushEnabled: userSettings?.pushNotifications,
+        hasFcmToken: !!userSettings?.fcmToken
       });
       return false;
     }
+    
+    // Initialize Firebase Admin
+    const admin = await initializeFirebaseAdmin();
+    const messaging = getMessaging(admin.app());
+    
+    // Send message through Firebase
+    const message = {
+      token: userSettings.fcmToken,
+      notification: {
+        title,
+        body,
+      },
+      data,
+      webpush: {
+        fcmOptions: {
+          link: process.env.NEXTAUTH_URL || 'https://quranki.vercel.app',
+        },
+        notification: {
+          icon: '/logo.png',
+          badge: '/logo.png',
+          actions: [
+            {
+              action: 'open_app',
+              title: 'Open App',
+            },
+          ],
+        },
+      },
+    };
 
-    const responseData = await response.json();
-    console.log('Email notification response:', responseData);
+    const response = await messaging.send(message);
+    console.log('Push notification sent:', response);
     return true;
   } catch (error) {
-    console.error('Error sending email notification:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    });
+    console.error('Error sending push notification:', error);
     return false;
   }
 }
 
 /**
- * Send a daily streak reminder email
+ * Send batch notifications to multiple users
+ * @param options Object containing userIds array and notification details
+ * @returns Object with counts of success and failure
  */
-export async function sendDailyStreakReminder({
-  email,
-  name,
-  currentStreak = 0
+export async function sendBatchPushNotifications({
+  userIds,
+  title,
+  body,
+  data = {}
 }: {
-  email: string;
-  name?: string;
-  currentStreak?: number;
-}): Promise<boolean> {
-  const greeting = name ? `Assalamu Alaikum ${name}` : 'Assalamu Alaikum';
-  let message = `${greeting},\n\nThis is your daily reminder to review the Quran on QuranKi.`;
-  
-  if (currentStreak > 0) {
-    message += `\n\nYou currently have a ${currentStreak}-day streak! MashaAllah, keep it up!`;
-  }
-  
-  message += '\n\nLogin to QuranKi to continue your practice: https://quranki.vercel.app/';
-  message += '\n\nJazakAllah khair,\nThe QuranKi Team';
+  userIds: string[];
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}): Promise<{ success: number; failed: number }> {
+  try {
+    if (!userIds.length) {
+      return { success: 0, failed: 0 };
+    }
 
-  return sendEmailNotification({
-    email,
-    subject: 'Your Daily Quran Review Reminder',
-    message
-  });
+    // Get FCM tokens for all users who have opted in
+    const userSettingsRaw = await prisma.$queryRaw`
+      SELECT "userId", "fcmToken"
+      FROM "NotificationSettings"
+      WHERE "userId" IN (${Prisma.join(userIds)})
+      AND "optedIn" = true
+      AND "pushNotifications" = true
+      AND "fcmToken" IS NOT NULL
+    `;
+    
+    const userSettings = Array.isArray(userSettingsRaw) ? userSettingsRaw : [];
+
+    if (!userSettings.length) {
+      console.log('No eligible users for batch notifications');
+      return { success: 0, failed: 0 };
+    }
+
+    // Initialize Firebase Admin
+    const admin = await initializeFirebaseAdmin();
+    const messaging = getMessaging(admin.app());
+    
+    // Process in batches of 500 (FCM limit)
+    let successCount = 0;
+    let failedCount = 0;
+    
+    // Extract tokens
+    const tokens = userSettings.map(setting => setting.fcmToken).filter(Boolean);
+    
+    // Send in batches of 500 (Firebase limit)
+    for (let i = 0; i < tokens.length; i += 500) {
+      const batchTokens = tokens.slice(i, i + 500);
+      
+      // Process each token individually since sendAll is not available
+      const batchResults = await Promise.all(
+        batchTokens.map(async (token) => {
+          try {
+            const message = {
+              token,
+              notification: {
+                title,
+                body,
+              },
+              data,
+              webpush: {
+                fcmOptions: {
+                  link: process.env.NEXTAUTH_URL || 'https://quranki.vercel.app',
+                },
+                notification: {
+                  icon: '/logo.png',
+                  badge: '/logo.png',
+                  actions: [
+                    {
+                      action: 'open_app',
+                      title: 'Open App',
+                    },
+                  ],
+                },
+              },
+            };
+            
+            await messaging.send(message);
+            return true;
+          } catch (error) {
+            console.error('Error sending batch notification to token:', error);
+            return false;
+          }
+        })
+      );
+      
+      const batchSuccessCount = batchResults.filter(success => success).length;
+      successCount += batchSuccessCount;
+      failedCount += (batchTokens.length - batchSuccessCount);
+      
+      console.log(`Batch push notification result: ${batchSuccessCount} successful, ${batchTokens.length - batchSuccessCount} failed`);
+    }
+    
+    return { success: successCount, failed: failedCount };
+  } catch (error) {
+    console.error('Error in batch notifications:', error);
+    return { success: 0, failed: userIds.length };
+  }
 }
 
 /**
- * Send a streak-at-risk warning email
+ * Send daily streak reminder notification
  */
-export async function sendStreakRiskReminder({
-  email,
-  name,
-  currentStreak = 0,
-  hoursRemaining = 24
-}: {
-  email: string;
-  name?: string;
-  currentStreak?: number;
-  hoursRemaining?: number;
-}): Promise<boolean> {
-  const greeting = name ? `Assalamu Alaikum ${name}` : 'Assalamu Alaikum';
-  let message = `${greeting},\n\n`;
+export async function sendDailyStreakReminder(params: DailyStreakReminder): Promise<boolean> {
+  const { userId, name, currentStreak } = params;
+  
+  let title = 'Daily Quran Review Reminder';
+  let body = `Time for your daily Quran review! `;
   
   if (currentStreak > 0) {
-    message += `Your ${currentStreak}-day Quran review streak is at risk! `;
-    message += `You have approximately ${hoursRemaining} hours to complete today's review.`;
+    body += `Current streak: ${currentStreak} days.`;
   } else {
-    message += `Don't forget to review the Quran today! You have approximately ${hoursRemaining} hours left to complete today's review.`;
+    body += `Start your streak today!`;
   }
   
-  message += '\n\nLogin to QuranKi now to keep your streak going: https://quranki.vercel.app/';
-  message += '\n\nJazakAllah khair,\nThe QuranKi Team';
-
-  return sendEmailNotification({
-    email,
-    subject: 'Your Quran Review Streak is at Risk!',
-    message
+  return await sendPushNotification({
+    userId,
+    title,
+    body,
+    data: {
+      type: 'daily_reminder',
+      url: '/review'
+    }
   });
 }
 
 /**
- * Send a weekly summary email
+ * Send streak at risk reminder notification
  */
-export async function sendWeeklySummary({
-  email,
-  name,
-  currentStreak = 0,
-  totalReviews = 0,
-  weeklyReviews = 0
-}: {
-  email: string;
-  name?: string;
-  currentStreak?: number;
-  totalReviews?: number;
-  weeklyReviews?: number;
-}): Promise<boolean> {
-  const greeting = name ? `Assalamu Alaikum ${name}` : 'Assalamu Alaikum';
-  let message = `${greeting},\n\nHere's your weekly QuranKi progress summary:\n\n`;
+export async function sendStreakRiskReminder(params: StreakReminder): Promise<boolean> {
+  const { userId, name, currentStreak, hoursRemaining } = params;
   
-  message += `- Current streak: ${currentStreak} days\n`;
+  const title = 'Your Streak is at Risk!';
+  const body = `Your ${currentStreak}-day streak is about to end! You have ${hoursRemaining} hours to complete today's review.`;
   
-  if (weeklyReviews > 0) {
-    message += `- Reviews this week: ${weeklyReviews}\n`;
-  }
-  
-  if (totalReviews > 0) {
-    message += `- Total reviews: ${totalReviews}\n`;
-  }
-  
-  message += '\nKeep up the great work! Remember, consistency is key to memorizing and maintaining your Quran knowledge.';
-  message += '\n\nLogin to QuranKi to continue your journey: https://quranki.com';
-  message += '\n\nJazakAllah khair,\nThe QuranKi Team';
+  return await sendPushNotification({
+    userId,
+    title,
+    body,
+    data: {
+      type: 'streak_risk',
+      url: '/review'
+    }
+  });
+}
 
-  return sendEmailNotification({
-    email,
-    subject: 'Your Weekly QuranKi Progress Summary',
-    message
+/**
+ * Send weekly summary notification
+ */
+export async function sendWeeklySummary(params: WeeklySummary): Promise<boolean> {
+  const { userId, name, currentStreak, weeklyReviews, totalReviews } = params;
+  
+  const title = 'Your Weekly Quran Progress';
+  const body = `Streak: ${currentStreak} days | This week: ${weeklyReviews} reviews | Total: ${totalReviews} reviews`;
+  
+  return await sendPushNotification({
+    userId,
+    title,
+    body,
+    data: {
+      type: 'weekly_summary',
+      url: '/profile'
+    }
   });
 } 

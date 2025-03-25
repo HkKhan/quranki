@@ -1,6 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendDailyStreakReminder, sendStreakRiskReminder, sendWeeklySummary } from '@/lib/notification';
+import { sendDailyStreakReminder, sendStreakRiskReminder, sendWeeklySummary, sendBatchPushNotifications } from '@/lib/notification';
+
+// Helper function to group users by notification type
+async function getUsersForNotification(notificationType: 'dailyReminders' | 'streakReminders' | 'weeklyReminders') {
+  // Get all users with notification settings opted in
+  return await prisma.$queryRaw`
+    SELECT u.id, u.name, ns."dailyReminders", ns."weeklyReminders", ns."streakReminders", 
+           ns."pushNotifications", ns."optedIn", ns."fcmToken"
+    FROM "User" u
+    JOIN "NotificationSettings" ns ON u.id = ns."userId"
+    WHERE ns."optedIn" = true 
+    AND ns."pushNotifications" = true
+    AND ns."${notificationType}" = true
+    AND ns."fcmToken" IS NOT NULL
+  `;
+}
 
 // Ensure this route is only called by a cron job
 export async function GET(request: Request) {
@@ -26,21 +41,11 @@ export async function GET(request: Request) {
     const now = new Date();
     const hour = now.getUTCHours();
     
-    // Get all users with notification settings opted in
-    const users = await prisma.$queryRaw`
-      SELECT u.id, u.name, u.email, ns."dailyReminders", ns."weeklyReminders", ns."streakReminders", ns."emailNotifications", ns."optedIn"
-      FROM "User" u
-      JOIN "NotificationSettings" ns ON u.id = ns."userId"
-      WHERE ns."optedIn" = true AND ns."emailNotifications" = true
-    `;
-
-    if (!Array.isArray(users) || users.length === 0) {
-      return NextResponse.json({
-        message: 'No users with notifications enabled',
-        users: 0
-      });
-    }
-
+    // Track notifications sent
+    let dailyRemindersSent = 0;
+    let riskRemindersSent = 0;
+    let weeklySummariesSent = 0;
+    
     // Get the current streak for each user
     // This is a simplified version - you'll need to implement actual streak calculation logic
     const userStreaks = await prisma.$queryRaw`
@@ -57,111 +62,188 @@ export async function GET(request: Request) {
       }
     }
 
-    // Track notifications sent
-    let dailyRemindersSent = 0;
-    let riskRemindersSent = 0;
-    let weeklySummariesSent = 0;
-    
-    // Process each user
-    for (const user of users) {
-      // Skip users who don't want email notifications
-      if (!user.emailNotifications) continue;
+    // DAILY REMINDERS - send at 8am UTC (adjust as needed)
+    if (hour === 8) {
+      const dailyUsers = await getUsersForNotification('dailyReminders');
       
-      const currentStreak = streakMap.get(user.id) || 0;
-      const userEmail = user.email;
-      const userName = user.name;
-      
-      // Daily reminder - send at 8am UTC (adjust as needed)
-      if (hour === 8 && user.dailyReminders) {
-        const success = await sendDailyStreakReminder({
-          email: userEmail,
-          name: userName,
-          currentStreak
-        });
+      if (Array.isArray(dailyUsers) && dailyUsers.length > 0) {
+        console.log(`Sending daily reminders to ${dailyUsers.length} users`);
         
-        if (success) dailyRemindersSent++;
+        // Process individual notifications
+        for (const user of dailyUsers) {
+          const currentStreak = streakMap.get(user.id) || 0;
+          
+          const success = await sendDailyStreakReminder({
+            userId: user.id,
+            name: user.name,
+            currentStreak
+          });
+          
+          if (success) dailyRemindersSent++;
+        }
+        
+        // Alternative: Process push notifications in batch
+        const userIds = dailyUsers.map(user => user.id);
+        
+        if (userIds.length > 0) {
+          // Create a generic message for all users since we're sending in batch
+          const result = await sendBatchPushNotifications({
+            userIds,
+            title: 'Daily Quran Review Reminder',
+            body: 'Time for your daily Quran review. Keep your streak going!',
+            data: {
+              type: 'daily_reminder',
+              url: 'https://quranki.vercel.app/'
+            }
+          });
+          
+          // Replace the individual count with the batch count if using batch
+          // dailyRemindersSent = result.success;
+        }
       }
+    }
+    
+    // STREAK RISK REMINDER - send at 20:00 UTC (8pm) to remind users with no activity that day
+    if (hour === 20) {
+      const riskUsers = await getUsersForNotification('streakReminders');
       
-      // Streak risk reminder - send at 20:00 UTC (8pm) to remind users with no activity that day
-      // Users can opt-in to these notifications independently with streakReminders
-      if (hour === 20 && user.streakReminders) {
-        // Check if the user has had activity today
-        const todayDate = new Date().toISOString().split('T')[0];
-        const todayActivity = await prisma.$queryRaw`
-          SELECT COUNT(*) as "count" 
-          FROM "DailyLog" 
-          WHERE "userId" = ${user.id} AND date = ${todayDate}
-        `;
+      if (Array.isArray(riskUsers) && riskUsers.length > 0) {
+        console.log(`Checking streak risk for ${riskUsers.length} users`);
         
-        const hasActivityToday = Array.isArray(todayActivity) && 
+        // Filter users who haven't had activity today but have streaks
+        const usersAtRisk = [];
+        const todayDate = new Date().toISOString().split('T')[0];
+        
+        for (const user of riskUsers) {
+          const currentStreak = streakMap.get(user.id) || 0;
+          
+          // Skip users with no streak
+          if (currentStreak === 0) continue;
+          
+          // Check if the user has had activity today
+          const todayActivity = await prisma.$queryRaw`
+            SELECT COUNT(*) as "count" 
+            FROM "DailyLog" 
+            WHERE "userId" = ${user.id} AND date = ${todayDate}
+          `;
+          
+          const hasActivityToday = Array.isArray(todayActivity) && 
                                 todayActivity.length > 0 && 
                                 todayActivity[0].count > 0;
+          
+          // If no activity today and streak > 0, add to at-risk list
+          if (!hasActivityToday) {
+            usersAtRisk.push({...user, currentStreak});
+          }
+        }
         
-        // If no activity today and streak > 0, send risk reminder
-        if (!hasActivityToday && currentStreak > 0) {
+        console.log(`${usersAtRisk.length} users at risk of losing their streak`);
+        
+        // Process individual notifications
+        for (const user of usersAtRisk) {
           const success = await sendStreakRiskReminder({
-            email: userEmail,
-            name: userName,
-            currentStreak,
+            userId: user.id,
+            name: user.name,
+            currentStreak: user.currentStreak,
             hoursRemaining: 4 // Adjust based on your timezone and day cutoff
           });
           
           if (success) riskRemindersSent++;
         }
-      }
-      
-      // Weekly summary - send on Sundays at 12:00 UTC
-      const dayOfWeek = now.getUTCDay(); // 0 = Sunday
-      if (dayOfWeek === 0 && hour === 12 && user.weeklyReminders) {
-        // Calculate weekly stats
-        const weekStartDate = new Date();
-        weekStartDate.setUTCDate(now.getUTCDate() - 7);
-        const weekStart = weekStartDate.toISOString().split('T')[0];
         
-        const weeklyStats = await prisma.$queryRaw`
-          SELECT COUNT(*) as "count" 
-          FROM "DailyLog" 
-          WHERE "userId" = ${user.id} AND date >= ${weekStart}
-        `;
+        // Alternative: Process push notifications in batch
+        const userIds = usersAtRisk.map(user => user.id);
         
-        const weeklyReviews = Array.isArray(weeklyStats) && 
-                            weeklyStats.length > 0 ? 
-                            weeklyStats[0].count : 0;
-        
-        // Get total reviews
-        const totalStats = await prisma.$queryRaw`
-          SELECT COUNT(*) as "count" 
-          FROM "DailyLog" 
-          WHERE "userId" = ${user.id}
-        `;
-        
-        const totalReviews = Array.isArray(totalStats) && 
-                           totalStats.length > 0 ? 
-                           totalStats[0].count : 0;
-        
-        const success = await sendWeeklySummary({
-          email: userEmail,
-          name: userName,
-          currentStreak,
-          weeklyReviews,
-          totalReviews
-        });
-        
-        if (success) weeklySummariesSent++;
+        if (userIds.length > 0) {
+          const result = await sendBatchPushNotifications({
+            userIds,
+            title: 'Your Streak is at Risk!',
+            body: 'Your Quran review streak is at risk! Complete today\'s review to keep it going.',
+            data: {
+              type: 'streak_risk',
+              url: 'https://quranki.vercel.app/'
+            }
+          });
+          
+          // Replace the individual count with the batch count if using batch
+          // riskRemindersSent = result.success;
+        }
       }
     }
     
+    // WEEKLY SUMMARY - send on Sundays at 12:00 UTC
+    const dayOfWeek = now.getUTCDay();
+    if (dayOfWeek === 0 && hour === 12) {
+      const weeklyUsers = await getUsersForNotification('weeklyReminders');
+      
+      if (Array.isArray(weeklyUsers) && weeklyUsers.length > 0) {
+        console.log(`Sending weekly summaries to ${weeklyUsers.length} users`);
+        
+        // Calculate weekly reviews for each user
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+        
+        const weeklyReviewsData = await prisma.$queryRaw`
+          SELECT "userId", COUNT(*) as "count"
+          FROM "DailyLog"
+          WHERE date >= ${oneWeekAgoStr}
+          GROUP BY "userId"
+        `;
+        
+        const weeklyReviewsMap = new Map();
+        if (Array.isArray(weeklyReviewsData)) {
+          for (const data of weeklyReviewsData) {
+            weeklyReviewsMap.set(data.userId, data.count);
+          }
+        }
+        
+        // Calculate total reviews for each user
+        const totalReviewsData = await prisma.$queryRaw`
+          SELECT "userId", COUNT(*) as "count"
+          FROM "DailyLog"
+          GROUP BY "userId"
+        `;
+        
+        const totalReviewsMap = new Map();
+        if (Array.isArray(totalReviewsData)) {
+          for (const data of totalReviewsData) {
+            totalReviewsMap.set(data.userId, data.count);
+          }
+        }
+        
+        // Individual push notifications for weekly summaries because they contain user-specific data
+        for (const user of weeklyUsers) {
+          const currentStreak = streakMap.get(user.id) || 0;
+          const weeklyReviews = weeklyReviewsMap.get(user.id) || 0;
+          const totalReviews = totalReviewsMap.get(user.id) || 0;
+          
+          const success = await sendWeeklySummary({
+            userId: user.id,
+            name: user.name,
+            currentStreak,
+            weeklyReviews,
+            totalReviews
+          });
+          
+          if (success) weeklySummariesSent++;
+        }
+      }
+    }
+    
+    // Return summary of the notifications sent
     return NextResponse.json({
-      message: 'Streak reminders processed',
-      totalUsers: users.length,
+      success: true,
+      timestamp: now.toISOString(),
       dailyRemindersSent,
       riskRemindersSent,
-      weeklySummariesSent
+      weeklySummariesSent,
+      totalSent: dailyRemindersSent + riskRemindersSent + weeklySummariesSent
     });
   } catch (error) {
-    console.error('Error processing streak reminders:', error);
+    console.error('Error in notifications cron:', error);
     return NextResponse.json(
-      { error: 'Failed to process streak reminders' },
+      { error: 'Failed to process notifications' },
       { status: 500 }
     );
   }
