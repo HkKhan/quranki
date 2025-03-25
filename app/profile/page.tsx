@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, User, Bell, Lock, Check } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface NotificationSettings {
@@ -23,9 +23,11 @@ interface NotificationSettings {
   streakReminders: boolean;
 }
 
-export default function ProfilePage() {
+// Separate component to handle the SearchParams hook
+function ProfileContent() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(status === 'loading');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -48,8 +50,16 @@ export default function ProfilePage() {
     streakReminders: false,
   });
 
-  // Add state to keep track of the current tab
-  const [currentTab, setCurrentTab] = useState('profile');
+  // Get the tab from URL parameters
+  const tabParam = searchParams.get('tab');
+  const [currentTab, setCurrentTab] = useState(tabParam || 'profile');
+
+  // Update currentTab when URL parameter changes
+  useEffect(() => {
+    if (tabParam) {
+      setCurrentTab(tabParam);
+    }
+  }, [tabParam]);
 
   // Listen for the custom event for name changes
   useEffect(() => {
@@ -493,7 +503,7 @@ export default function ProfilePage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="profile" value={currentTab} onValueChange={setCurrentTab}>
+      <Tabs defaultValue={currentTab} value={currentTab} onValueChange={setCurrentTab}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />
@@ -612,121 +622,129 @@ export default function ProfilePage() {
                 Configure how and when you want to receive notifications about your Quran review progress.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="push-notifications">Push Notifications</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow browser notifications to stay updated about your Quran review progress
+            <form onSubmit={handleUpdateNotifications}>
+              <CardContent className="space-y-4">
+                <Alert className="mb-4 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-900">
+                  <Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <AlertDescription>
+                    <p className="text-blue-700 dark:text-blue-200">
+                      <strong>Desktop Only:</strong> Push notifications currently only work on desktop browsers. Our mobile app is coming soon!
                     </p>
+                  </AlertDescription>
+                </Alert>
+                
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="daily-reminders">Daily Reminders</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Get reminded to do your daily Quran review
+                      </p>
+                    </div>
+                    <Switch
+                      id="daily-reminders"
+                      checked={notificationSettings.dailyReminders}
+                      onCheckedChange={(checked) => {
+                        setNotificationSettings(prev => ({
+                          ...prev,
+                          dailyReminders: checked,
+                          // If any notification is enabled, enable push notifications and opt in
+                          pushNotifications: checked || prev.weeklyReminders || prev.streakReminders,
+                          optedIn: checked || prev.weeklyReminders || prev.streakReminders
+                        }));
+                      }}
+                    />
                   </div>
-                  <Switch
-                    id="push-notifications"
-                    checked={notificationSettings.pushNotifications}
-                    onCheckedChange={(checked) => {
-                      setNotificationSettings(prev => ({
-                        ...prev,
-                        pushNotifications: checked,
-                        optedIn: checked
-                      }));
-                      saveNotificationSettings();
-                    }}
-                  />
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="streak-reminders">Streak Alerts</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Get notified when your streak is at risk
+                      </p>
+                    </div>
+                    <Switch
+                      id="streak-reminders"
+                      checked={notificationSettings.streakReminders}
+                      onCheckedChange={(checked) => {
+                        setNotificationSettings(prev => ({
+                          ...prev,
+                          streakReminders: checked,
+                          // If any notification is enabled, enable push notifications and opt in
+                          pushNotifications: checked || prev.dailyReminders || prev.weeklyReminders,
+                          optedIn: checked || prev.dailyReminders || prev.weeklyReminders
+                        }));
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="weekly-reminders">Weekly Summary</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Receive a weekly summary of your progress
+                      </p>
+                    </div>
+                    <Switch
+                      id="weekly-reminders"
+                      checked={notificationSettings.weeklyReminders}
+                      onCheckedChange={(checked) => {
+                        setNotificationSettings(prev => ({
+                          ...prev,
+                          weeklyReminders: checked,
+                          // If any notification is enabled, enable push notifications and opt in
+                          pushNotifications: checked || prev.dailyReminders || prev.streakReminders,
+                          optedIn: checked || prev.dailyReminders || prev.streakReminders
+                        }));
+                      }}
+                    />
+                  </div>
                 </div>
-
-                {notificationSettings.pushNotifications && (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="daily-reminders">Daily Reminders</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Get reminded to do your daily Quran review
-                        </p>
-                      </div>
-                      <Switch
-                        id="daily-reminders"
-                        checked={notificationSettings.dailyReminders}
-                        onCheckedChange={(checked) => {
-                          setNotificationSettings(prev => ({
-                            ...prev,
-                            dailyReminders: checked
-                          }));
-                          saveNotificationSettings();
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="streak-reminders">Streak Alerts</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Get notified when your streak is at risk
-                        </p>
-                      </div>
-                      <Switch
-                        id="streak-reminders"
-                        checked={notificationSettings.streakReminders}
-                        onCheckedChange={(checked) => {
-                          setNotificationSettings(prev => ({
-                            ...prev,
-                            streakReminders: checked
-                          }));
-                          saveNotificationSettings();
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="weekly-reminders">Weekly Summary</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Receive a weekly summary of your progress
-                        </p>
-                      </div>
-                      <Switch
-                        id="weekly-reminders"
-                        checked={notificationSettings.weeklyReminders}
-                        onCheckedChange={(checked) => {
-                          setNotificationSettings(prev => ({
-                            ...prev,
-                            weeklyReminders: checked
-                          }));
-                          saveNotificationSettings();
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button 
-                variant="outline" 
-                onClick={async () => {
-                  try {
-                    const response = await fetch('/api/test-notification', {
-                      method: 'POST',
-                    });
-                    
-                    if (!response.ok) {
-                      const data = await response.json();
-                      setError(data.message || 'Failed to send test notification');
-                      return;
+              </CardContent>
+              <CardFooter className="flex justify-between">
+                <Button 
+                  variant="outline" 
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/test-notification', {
+                        method: 'POST',
+                      });
+                      
+                      if (!response.ok) {
+                        const data = await response.json();
+                        setError(data.message || 'Failed to send test notification');
+                        return;
+                      }
+                      
+                      setSuccess('Test notification sent! Check your browser notifications.');
+                    } catch (error) {
+                      setError('Failed to send test notification');
                     }
-                    
-                    setSuccess('Test notification sent! Check your browser notifications.');
-                  } catch (error) {
-                    setError('Failed to send test notification');
-                  }
-                }}
-              >
-                Send Test Notification
-              </Button>
-            </CardFooter>
+                  }}
+                >
+                  Send Test Notification
+                </Button>
+                <Button type="submit">
+                  Save Notification Settings
+                </Button>
+              </CardFooter>
+            </form>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Main component that wraps the ProfileContent with Suspense
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="container flex items-center justify-center min-h-[60vh]">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
+      </div>
+    }>
+      <ProfileContent />
+    </Suspense>
   );
 } 

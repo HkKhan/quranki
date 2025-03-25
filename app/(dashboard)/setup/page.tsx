@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useSession } from "next-auth/react";
+import { NotificationPrompt } from "@/components/notifications/NotificationPrompt";
+import { SetupNotificationPrompt } from "@/components/notifications/SetupNotificationPrompt";
 
 // Interface for Surah type
 interface SurahInfo {
@@ -256,6 +258,11 @@ export default function SetupPage() {
       <p className="text-muted-foreground mb-8">
         Configure your Quran review settings to personalize your experience.
       </p>
+
+      {/* Custom notification prompt that always shows for new users on setup */}
+      <div className="mb-8">
+        <SetupNotificationPrompt />
+      </div>
 
       <div className="grid gap-8">
         <Card>
