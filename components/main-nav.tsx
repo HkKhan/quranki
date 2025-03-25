@@ -28,6 +28,7 @@ export function MainNav() {
   const { data: session, status } = useSession();
   const isLoading = status === "loading";
   const [hasSettings, setHasSettings] = useState<boolean | null>(null);
+  const isAuthenticated = status === "authenticated";
 
   // After hydration, we can safely show the UI that depends on the theme
   React.useEffect(() => {
@@ -76,7 +77,8 @@ export function MainNav() {
     }
   };
 
-  const routes = [
+  // Full routes for authenticated users
+  const authenticatedRoutes = [
     {
       href: "/dashboard",
       label: "Dashboard",
@@ -109,43 +111,108 @@ export function MainNav() {
     },
   ];
 
+  // Limited routes for unauthenticated users
+  const unauthenticatedRoutes = [
+    {
+      href: "/leaderboard",
+      label: "Leaderboard",
+      active: pathname === "/leaderboard",
+    },
+  ];
+
+  // Choose routes based on authentication status
+  const routes = isAuthenticated ? authenticatedRoutes : unauthenticatedRoutes;
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
-        <div className="md:hidden mr-2">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="mr-2">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-[240px] sm:w-[240px]">
-              <nav className="flex flex-col space-y-4 mt-8">
-                {routes.map((route) => (
+        {/* Mobile Menu Hamburger - Only for authenticated users */}
+        {isAuthenticated ? (
+          <div className="md:hidden mr-2">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="mr-2">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[240px] sm:w-[240px]">
+                <nav className="flex flex-col space-y-4 mt-8">
+                  {authenticatedRoutes.map((route) => (
+                    <Link
+                      key={route.href}
+                      href={route.href}
+                      onClick={(e) => handleNavigation(route.href, e)}
+                      className={cn(
+                        "text-sm font-medium py-2 transition-colors hover:text-primary",
+                        route.active
+                          ? "border-l-2 border-primary pl-3 text-foreground"
+                          : "text-foreground pl-4",
+                        route.href === "/review" &&
+                          status === "authenticated" &&
+                          hasSettings === false
+                          ? "text-muted-foreground hover:text-primary/70"
+                          : ""
+                      )}
+                    >
+                      {route.label}
+                    </Link>
+                  ))}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
+        ) : (
+          <div className="md:hidden mr-2">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="mr-2">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[240px] sm:w-[240px]">
+                <nav className="flex flex-col space-y-4 mt-8">
                   <Link
-                    key={route.href}
-                    href={route.href}
-                    onClick={(e) => handleNavigation(route.href, e)}
+                    href="/leaderboard"
                     className={cn(
                       "text-sm font-medium py-2 transition-colors hover:text-primary",
-                      route.active
+                      pathname === "/leaderboard"
                         ? "border-l-2 border-primary pl-3 text-foreground"
-                        : "text-foreground pl-4",
-                      route.href === "/review" &&
-                        status === "authenticated" &&
-                        hasSettings === false
-                        ? "text-muted-foreground hover:text-primary/70"
-                        : ""
+                        : "text-foreground pl-4"
                     )}
                   >
-                    {route.label}
+                    Leaderboard
                   </Link>
-                ))}
-              </nav>
-            </SheetContent>
-          </Sheet>
-        </div>
+                  <Link
+                    href="/register"
+                    className={cn(
+                      "text-sm font-medium py-2 transition-colors hover:text-primary",
+                      pathname === "/register"
+                        ? "border-l-2 border-primary pl-3 text-foreground"
+                        : "text-foreground pl-4"
+                    )}
+                  >
+                    Sign up
+                  </Link>
+                  <Link
+                    href="/login"
+                    className={cn(
+                      "text-sm font-medium py-2 transition-colors hover:text-primary",
+                      pathname === "/login"
+                        ? "border-l-2 border-primary pl-3 text-foreground"
+                        : "text-foreground pl-4"
+                    )}
+                  >
+                    Sign in
+                  </Link>
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
+        )}
+        
+        {/* Logo */}
         <div className="flex items-center mr-4">
           <Link href="/" className="flex items-center">
             <div
@@ -174,7 +241,10 @@ export function MainNav() {
             </div>
           </Link>
         </div>
+        
         <div className="flex-1"></div>
+        
+        {/* Desktop Navigation Menu */}
         <nav className="hidden md:flex items-center space-x-6 pr-6">
           {routes.map((route) => (
             <Link
@@ -197,10 +267,12 @@ export function MainNav() {
             </Link>
           ))}
         </nav>
+        
+        {/* Right side actions */}
         <div className="flex items-center space-x-2">
           {isLoading ? (
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-          ) : session?.user ? (
+          ) : isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -210,7 +282,7 @@ export function MainNav() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
-                  {session.user.name || session.user.email}
+                  {session?.user?.name || session?.user?.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -223,13 +295,23 @@ export function MainNav() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link
-              href="/login"
-              className="text-sm font-medium transition-colors hover:text-primary text-foreground"
-            >
-              Sign in
-            </Link>
+            <>
+              <Link
+                href="/register"
+                className="text-sm font-medium transition-colors hover:text-primary text-foreground mr-2"
+              >
+                Sign up
+              </Link>
+              <Link
+                href="/login"
+                className="text-sm font-medium transition-colors hover:text-primary text-foreground"
+              >
+                Sign in
+              </Link>
+            </>
           )}
+          
+          {/* Theme Toggle Button */}
           <Button
             variant="ghost"
             size="sm"
