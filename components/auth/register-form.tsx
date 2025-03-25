@@ -1,13 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 export function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [invitedBy, setInvitedBy] = useState<string | null>(null);
+
+  useEffect(() => {
+    const inviteParam = searchParams.get("invitedBy");
+    if (inviteParam) {
+      setInvitedBy(inviteParam);
+    }
+  }, [searchParams]);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +39,12 @@ export function RegisterForm() {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ 
+          name, 
+          email, 
+          password,
+          invitedBy  // Include the invitation email
+        }),
       });
 
       if (!response.ok) {

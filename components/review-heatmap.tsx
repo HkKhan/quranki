@@ -5,6 +5,25 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+// Add a useMediaQuery hook to detect mobile screens
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) {
+      setMatches(media.matches);
+    }
+
+    const listener = () => setMatches(media.matches);
+    media.addEventListener("change", listener);
+    
+    return () => media.removeEventListener("change", listener);
+  }, [matches, query]);
+
+  return matches;
+}
+
 interface ReviewData {
   interval: number;
   repetitions: number;
@@ -29,19 +48,47 @@ export function ReviewHeatmap() {
   const [hoveredDay, setHoveredDay] = useState<DayData | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [stats, setStats] = useState({
     dailyAverage: 0,
     totalReviews: 0,
     daysWithReviews: 0,
     totalDue: 0,
   });
+  
+  // Detect mobile screens
+  const isMobile = useMediaQuery("(max-width: 640px)");
 
+  // Navigation functions for year and month
   const goToPreviousYear = () => {
     setCurrentYear(currentYear - 1);
   };
 
   const goToNextYear = () => {
     setCurrentYear(currentYear + 1);
+  };
+  
+  const goToPreviousMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
+  
+  // Get current month name
+  const getCurrentMonthName = () => {
+    return new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
   };
 
   // Force refresh of data every 60 seconds to capture new reviews
@@ -63,7 +110,7 @@ export function ReviewHeatmap() {
 
     // Set canvas dimensions using standard HTML dimensions without pixel ratio adjustments
     const canvasWidth = canvas.clientWidth;
-    const canvasHeight = 180;
+    const canvasHeight = isMobile ? 220 : 180; // Increase height on mobile for stacked legend
 
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
@@ -73,11 +120,20 @@ export function ReviewHeatmap() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate start and end dates for the current year
-    const startDate = new Date(currentYear, 0, 1); // January 1st of current year
-    const endDate = new Date(currentYear + 1, 0, 0); // December 31st of current year
-    const days =
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
+    // Calculate start and end dates based on view type (year or month)
+    let startDate, endDate, days;
+    
+    if (isMobile) {
+      // For mobile: Show only current month
+      startDate = new Date(currentYear, currentMonth, 1);
+      endDate = new Date(currentYear, currentMonth + 1, 0); // Last day of current month
+    } else {
+      // For desktop: Show entire year
+      startDate = new Date(currentYear, 0, 1); // January 1st of current year
+      endDate = new Date(currentYear + 1, 0, 0); // December 31st of current year
+    }
+    
+    days = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1;
 
     const data: DayData[] = [];
     // Get exact current date with timezone offset to ensure accurate local date
@@ -109,7 +165,7 @@ export function ReviewHeatmap() {
 
         let totalReviews = 0;
         let daysWithReviews = 0;
-        let yearReviews = 0;
+        let periodReviews = 0; // Reviews for current period (year or month)
         let totalDue = 0;
 
         // Process past review data from daily logs
@@ -119,23 +175,26 @@ export function ReviewHeatmap() {
           // Map daily reviews to data array
           Object.entries(dailyReviews).forEach(([dateStr, count]) => {
             // Create date from the dateStr returned by the API
-            // Important: Create a date from the YYYY-MM-DD string without assuming timezone
             const reviewDate = new Date(dateStr);
             
-            // Our workaround for handling date inconsistencies is no longer needed since we fixed the API
-            if (reviewDate.getFullYear() === currentYear) {
-              // Calculate dayOfYear
-              const dayOfYear = Math.floor(
+            // Check if date is within current view period
+            const inCurrentPeriod = isMobile 
+              ? reviewDate.getFullYear() === currentYear && reviewDate.getMonth() === currentMonth
+              : reviewDate.getFullYear() === currentYear;
+              
+            if (inCurrentPeriod) {
+              // Calculate day index relative to start date
+              const dayIndex = Math.floor(
                 (reviewDate.getTime() - startDate.getTime()) /
                   (1000 * 60 * 60 * 24)
               );
 
-              if (dayOfYear >= 0 && dayOfYear < days) {
+              if (dayIndex >= 0 && dayIndex < days) {
                 const reviewCount = count as number;
                 if (reviewCount > 0) {
                   daysWithReviews++;
-                  data[dayOfYear].reviewCount = reviewCount;
-                  yearReviews += reviewCount;
+                  data[dayIndex].reviewCount = reviewCount;
+                  periodReviews += reviewCount;
                 }
               }
             }
@@ -151,15 +210,19 @@ export function ReviewHeatmap() {
           dueItems.forEach((item: any) => {
             const dueDate = new Date(item.dueDate);
             
-            // Only process future due dates
-            if (dueDate >= normalizedToday && dueDate.getFullYear() === currentYear) {
-              const dayOfYear = Math.floor(
+            // Check if date is within current view period and is today or in the future
+            const inCurrentPeriod = isMobile
+              ? dueDate.getFullYear() === currentYear && dueDate.getMonth() === currentMonth
+              : dueDate.getFullYear() === currentYear;
+              
+            if (dueDate >= normalizedToday && inCurrentPeriod) {
+              const dayIndex = Math.floor(
                 (dueDate.getTime() - startDate.getTime()) /
                   (1000 * 60 * 60 * 24)
               );
 
-              if (dayOfYear >= 0 && dayOfYear < days) {
-                data[dayOfYear].dueCount += 1;
+              if (dayIndex >= 0 && dayIndex < days) {
+                data[dayIndex].dueCount += 1;
                 totalDue += 1;
               }
             }
@@ -171,15 +234,19 @@ export function ReviewHeatmap() {
             if (item.dueDate) {
               const dueDate = new Date(item.dueDate);
               
-              // Only process future due dates
-              if (dueDate >= normalizedToday && dueDate.getFullYear() === currentYear) {
-                const dayOfYear = Math.floor(
+              // Check if date is within current view period and is today or in the future
+              const inCurrentPeriod = isMobile
+                ? dueDate.getFullYear() === currentYear && dueDate.getMonth() === currentMonth
+                : dueDate.getFullYear() === currentYear;
+                
+              if (dueDate >= normalizedToday && inCurrentPeriod) {
+                const dayIndex = Math.floor(
                   (dueDate.getTime() - startDate.getTime()) /
                     (1000 * 60 * 60 * 24)
                 );
 
-                if (dayOfYear >= 0 && dayOfYear < days) {
-                  data[dayOfYear].dueCount += 1;
+                if (dayIndex >= 0 && dayIndex < days) {
+                  data[dayIndex].dueCount += 1;
                   totalDue += 1;
                 }
               }
@@ -189,10 +256,10 @@ export function ReviewHeatmap() {
 
         // Calculate and set stats
         const dailyAverage =
-          daysWithReviews > 0 ? yearReviews / daysWithReviews : 0;
+          daysWithReviews > 0 ? periodReviews / daysWithReviews : 0;
         setStats({
           dailyAverage,
-          totalReviews: yearReviews,
+          totalReviews: periodReviews,
           daysWithReviews,
           totalDue,
         });
@@ -234,8 +301,8 @@ export function ReviewHeatmap() {
         const CELL_PADDING = 3;
         const TOTAL_CELL_SIZE = CELL_SIZE + CELL_PADDING;
 
-        // Calculate grid dimensions
-        const ROWS = 7;
+        // Calculate grid dimensions based on view type
+        const ROWS = 7; // Days of the week
         const COLS = Math.ceil(days / ROWS);
         const gridWidth = COLS * TOTAL_CELL_SIZE;
         const gridHeight = ROWS * TOTAL_CELL_SIZE;
@@ -253,6 +320,21 @@ export function ReviewHeatmap() {
           height: number;
           data: DayData;
         }[] = [];
+
+        // Draw day headings for mobile view (only in monthly view)
+        if (isMobile) {
+          const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+          ctx.font = '10px system-ui';
+          ctx.fillStyle = '#888888';
+          
+          for (let i = 0; i < ROWS; i++) {
+            ctx.fillText(
+              dayLabels[i],
+              startX - 12, // Position to the left of the grid
+              startY + i * TOTAL_CELL_SIZE + CELL_SIZE / 2 + 3 // Align with grid rows
+            );
+          }
+        }
 
         // Draw cells
         data.forEach((day, index) => {
@@ -343,7 +425,7 @@ export function ReviewHeatmap() {
           ctx.fill();
 
           // Highlight today
-          if (normalizedDayDate.getTime() === normalizedToday.getTime()) {
+          if (normalizedDayDate.toDateString() === today.toDateString()) {
             ctx.strokeStyle = "#374151";
             ctx.lineWidth = 1.5;
             ctx.stroke();
@@ -358,25 +440,44 @@ export function ReviewHeatmap() {
         const isDarkMode = document.documentElement.classList.contains("dark");
         ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
 
-        // Past reviews legend
-        ctx.fillText("Reviews:", startX, legendY);
-        reviewColors.slice(1).forEach((color, i) => {
-          ctx.fillStyle = color;
-          ctx.fillRect(startX + 70 + i * 30, legendY - 10, 24, 10);
-        });
+        if (isMobile) {
+          // Mobile view: Stacked vertical legend
+          // Reviews legend
+          ctx.fillText("Reviews:", startX, legendY);
+          reviewColors.slice(1).forEach((color, i) => {
+            ctx.fillStyle = color;
+            ctx.fillRect(startX + 70 + i * 22, legendY - 10, 16, 10); // Smaller boxes, closer together
+          });
 
-        // Future due legend
-        ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
-        ctx.fillText("Due:", startX + canvasWidth / 2 - CANVAS_PADDING, legendY);
-        dueColors.slice(1).forEach((color, i) => {
-          ctx.fillStyle = color;
-          ctx.fillRect(
-            startX + canvasWidth / 2 - CANVAS_PADDING + 40 + i * 30,
-            legendY - 10,
-            24,
-            10
-          );
-        });
+          // Due items legend - positioned below reviews legend
+          ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
+          ctx.fillText("Due:", startX, legendY + 20); // Position below reviews legend
+          dueColors.slice(1).forEach((color, i) => {
+            ctx.fillStyle = color;
+            ctx.fillRect(startX + 70 + i * 22, legendY + 10, 16, 10); // Smaller boxes, closer together
+          });
+        } else {
+          // Desktop view: Side-by-side legend
+          // Past reviews legend
+          ctx.fillText("Reviews:", startX, legendY);
+          reviewColors.slice(1).forEach((color, i) => {
+            ctx.fillStyle = color;
+            ctx.fillRect(startX + 70 + i * 30, legendY - 10, 24, 10);
+          });
+
+          // Future due legend
+          ctx.fillStyle = isDarkMode ? "#e2e8f0" : "#6b7280";
+          ctx.fillText("Due:", startX + canvasWidth / 2 - CANVAS_PADDING, legendY);
+          dueColors.slice(1).forEach((color, i) => {
+            ctx.fillStyle = color;
+            ctx.fillRect(
+              startX + canvasWidth / 2 - CANVAS_PADDING + 40 + i * 30,
+              legendY - 10,
+              24,
+              10
+            );
+          });
+        }
 
         // Add hover effect handler
         const handleMouseMove = (e: MouseEvent) => {
@@ -423,31 +524,50 @@ export function ReviewHeatmap() {
     };
 
     fetchData();
-  }, [currentYear]);
+  }, [currentYear, currentMonth, isMobile]);
 
   return (
     <Card className="w-full">
       <CardContent className="pt-6">
+        {/* Control buttons - conditionally show year or month navigation */}
         <div className="flex items-center justify-between mb-4">
           <Button
             variant="outline"
             size="sm"
-            onClick={goToPreviousYear}
+            onClick={isMobile ? goToPreviousMonth : goToPreviousYear}
             className="h-8 w-8 p-0"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="font-medium">{currentYear} Review Activity</div>
+          
+          <div className="font-medium">
+            {isMobile 
+              ? `${getCurrentMonthName()} ${currentYear}`
+              : `${currentYear} Review Activity`
+            }
+          </div>
+          
           <Button
             variant="outline"
             size="sm"
-            onClick={goToNextYear}
+            onClick={isMobile ? goToNextMonth : goToNextYear}
             className="h-8 w-8 p-0"
-            disabled={currentYear >= new Date().getFullYear() + 1}
+            disabled={isMobile 
+              ? (currentYear > new Date().getFullYear() || 
+                (currentYear === new Date().getFullYear() && currentMonth >= new Date().getMonth()))
+              : currentYear >= new Date().getFullYear() + 1
+            }
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        
+        {/* View switcher - only show for debugging 
+        <div className="text-center text-xs text-muted-foreground mb-2">
+          {isMobile ? "Monthly View" : "Yearly View"}
+        </div>
+        */}
+        
         <div className="relative w-full">
           <canvas
             ref={canvasRef}
@@ -486,6 +606,12 @@ export function ReviewHeatmap() {
               )}
             </div>
           )}
+        </div>
+        
+        {/* Display period summary */}
+        <div className="mt-4 text-xs text-center text-muted-foreground">
+          <span className="font-medium">{stats.totalReviews}</span> ayahs reviewed in {isMobile ? 'this month' : 'this year'} 
+          {stats.totalDue > 0 && <span> • <span className="font-medium">{stats.totalDue}</span> due</span>}
         </div>
       </CardContent>
     </Card>

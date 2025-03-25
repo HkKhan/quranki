@@ -65,6 +65,16 @@ export async function GET(request: NextRequest) {
       dailyReviews[log.date] += log.count;
     });
     
+    // Add debugging info to help diagnose date issues
+    const debugInfo = {
+      currentServerTime: new Date().toISOString(),
+      currentServerLocalDate: new Date().toLocaleDateString(),
+      formattedLocalDate: new Date().getFullYear() + '-' + 
+                        String(new Date().getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(new Date().getDate()).padStart(2, '0'),
+      dailyLogDates: dailyLogs.map(log => log.date)
+    };
+    
     return NextResponse.json({
       success: true,
       reviewStats: {
@@ -76,6 +86,7 @@ export async function GET(request: NextRequest) {
           selectionType: item.selectionType,
         })),
       },
+      debug: debugInfo // Include debug info in response
     });
   } catch (error) {
     console.error("Error fetching review stats:", error);

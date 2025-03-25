@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, Bug, Loader2 } from "lucide-react";
-import { useToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/use-toast";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -20,7 +20,7 @@ export default function BugReportPage() {
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ticketNumber, setTicketNumber] = useState<string | null>(null);
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -64,7 +64,7 @@ export default function BugReportPage() {
       const data = await response.json();
       setTicketNumber(data.ticketNumber);
 
-      addToast({
+      toast({
         title: "Bug Report Submitted",
         description: `Thank you for your feedback. Your ticket number is: ${data.ticketNumber}`,
       });
@@ -72,7 +72,7 @@ export default function BugReportPage() {
       // Reset form
       setDescription("");
     } catch (error) {
-      addToast({
+      toast({
         title: "Error",
         description: "Failed to submit bug report. Please try again.",
         variant: "destructive",
