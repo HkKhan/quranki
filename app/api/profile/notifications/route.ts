@@ -23,16 +23,12 @@ export async function GET() {
     }
     
     try {
-      // Using findFirst as a fallback in case unique constraints aren't working correctly
-      const settings = await prisma.$queryRaw`
-        SELECT * FROM "NotificationSettings" WHERE "userId" = ${session.user.id}
-      `;
-      
-      // Check if settings is an array with data
-      const settingsData = Array.isArray(settings) && settings.length > 0 ? settings[0] : null;
+      const settings = await prisma.notificationSettings.findUnique({
+        where: { userId: session.user.id }
+      });
       
       // Return empty settings if none exist yet
-      if (!settingsData) {
+      if (!settings) {
         return NextResponse.json({ 
           optedIn: false,
           emailNotifications: true,
@@ -43,11 +39,11 @@ export async function GET() {
       }
       
       return NextResponse.json({ 
-        optedIn: settingsData.optedIn,
-        emailNotifications: settingsData.emailNotifications ?? true,
-        dailyReminders: settingsData.dailyReminders ?? false,
-        weeklyReminders: settingsData.weeklyReminders ?? false,
-        streakReminders: settingsData.streakReminders ?? false
+        optedIn: settings.optedIn,
+        emailNotifications: settings.emailNotifications ?? true,
+        dailyReminders: settings.dailyReminders ?? false,
+        weeklyReminders: settings.weeklyReminders ?? false,
+        streakReminders: settings.streakReminders ?? false
       });
     } catch (dbError) {
       console.error('Database error fetching notification settings:', dbError);
@@ -65,7 +61,6 @@ export async function GET() {
     }
   } catch (error) {
     console.error('Error fetching notification settings:', error);
-    // Always return a valid JSON response even on error
     return NextResponse.json(
       { 
         error: 'Failed to fetch notification settings',
@@ -105,63 +100,28 @@ export async function POST(request: Request) {
     };
     
     try {
-      // Check if settings already exist
-      const existingSettings = await prisma.$queryRaw`
-        SELECT * FROM "NotificationSettings" WHERE "userId" = ${session.user.id}
-      `;
+      // Use upsert to either create new settings or update existing ones
+      const settings = await prisma.notificationSettings.upsert({
+        where: {
+          userId: session.user.id
+        },
+        update: {
+          optedIn: updateData.optedIn,
+          emailNotifications: updateData.emailNotifications,
+          dailyReminders: updateData.dailyReminders,
+          weeklyReminders: updateData.weeklyReminders,
+          streakReminders: updateData.streakReminders,
+        },
+        create: {
+          userId: session.user.id,
+          optedIn: updateData.optedIn,
+          emailNotifications: updateData.emailNotifications,
+          dailyReminders: updateData.dailyReminders,
+          weeklyReminders: updateData.weeklyReminders,
+          streakReminders: updateData.streakReminders,
+        }
+      });
       
-      let settings;
-      
-      if (Array.isArray(existingSettings) && existingSettings.length > 0) {
-        // Update existing settings
-        await prisma.$executeRaw`
-          UPDATE "NotificationSettings"
-          SET 
-            "optedIn" = ${updateData.optedIn},
-            "emailNotifications" = ${updateData.emailNotifications},
-            "dailyReminders" = ${updateData.dailyReminders},
-            "weeklyReminders" = ${updateData.weeklyReminders},
-            "streakReminders" = ${updateData.streakReminders},
-            "updatedAt" = NOW()
-          WHERE "userId" = ${session.user.id}
-        `;
-        
-        // Fetch the updated settings
-        const updatedSettings = await prisma.$queryRaw`
-          SELECT * FROM "NotificationSettings" WHERE "userId" = ${session.user.id}
-        `;
-        
-        settings = Array.isArray(updatedSettings) && updatedSettings.length > 0 ? updatedSettings[0] : null;
-      } else {
-        // Create new settings
-        await prisma.$executeRaw`
-          INSERT INTO "NotificationSettings" 
-          ("userId", "optedIn", "emailNotifications", "dailyReminders", "weeklyReminders", "streakReminders", "createdAt", "updatedAt")
-          VALUES (
-            ${session.user.id},
-            ${updateData.optedIn},
-            ${updateData.emailNotifications},
-            ${updateData.dailyReminders},
-            ${updateData.weeklyReminders},
-            ${updateData.streakReminders},
-            NOW(),
-            NOW()
-          )
-        `;
-        
-        // Fetch the new settings
-        const newSettings = await prisma.$queryRaw`
-          SELECT * FROM "NotificationSettings" WHERE "userId" = ${session.user.id}
-        `;
-        
-        settings = Array.isArray(newSettings) && newSettings.length > 0 ? newSettings[0] : null;
-      }
-      
-      if (!settings) {
-        throw new Error('Failed to update or retrieve settings');
-      }
-      
-      // Use the retrieved settings
       return NextResponse.json({ 
         success: true,
         optedIn: settings.optedIn,
