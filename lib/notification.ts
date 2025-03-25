@@ -26,14 +26,16 @@ export async function sendEmailNotification({
   }
 
   try {
-
     // Server-side: Use our email API to send the email
-    const apiUrl = isBrowser
-      ? '/api/send-email'  // Client-side relative URL
-      : `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/send-email`;  // Server-side absolute URL
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const apiUrl = isBrowser ? '/api/send-email' : `${siteUrl}/api/send-email`;
     
     // Get the API key - handle both client and server side contexts
-    const apiKey = process.env.NOTIFICATION_API_KEY || '';
+    const apiKey = process.env.NOTIFICATION_API_KEY;
+    if (!apiKey) {
+      console.error('NOTIFICATION_API_KEY is not set');
+      return false;
+    }
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -51,9 +53,15 @@ export async function sendEmailNotification({
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      console.error('Failed to send email notification:', errorData);
+      console.error('Failed to send email notification:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
       return false;
     }
+
+    const responseData = await response.json();
     return true;
   } catch (error) {
     console.error('Error sending email notification:', error);
