@@ -45,10 +45,9 @@ export async function PATCH(request: Request) {
     }
     
     if (action === "accept") {
-      // Update request status
-      await prisma.friendRequest.update({
-        where: { id: requestId },
-        data: { status: "accepted" }
+      // Delete the request instead of updating its status
+      await prisma.friendRequest.delete({
+        where: { id: requestId }
       });
       
       // Create friendship
@@ -64,10 +63,9 @@ export async function PATCH(request: Request) {
         friendship
       });
     } else {
-      // Decline the request
-      await prisma.friendRequest.update({
-        where: { id: requestId },
-        data: { status: "declined" }
+      // Decline the request - delete it instead of updating status
+      await prisma.friendRequest.delete({
+        where: { id: requestId }
       });
       
       return NextResponse.json({

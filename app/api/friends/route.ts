@@ -189,10 +189,9 @@ export async function POST(request: Request) {
     if (existingRequest) {
       // If there's an existing request from the other user to this user, accept it
       if (existingRequest.senderId === userToAdd.id && existingRequest.receiverId === userId) {
-        // Accept the existing request
-        await prisma.friendRequest.update({
-          where: { id: existingRequest.id },
-          data: { status: "accepted" }
+        // Delete the existing request instead of updating it
+        await prisma.friendRequest.delete({
+          where: { id: existingRequest.id }
         });
         
         // Create a friendship
@@ -275,9 +274,24 @@ export async function DELETE(request: Request) {
       );
     }
     
+    // Get the other user's ID
+    const otherUserId = friendship.user1Id === userId 
+      ? friendship.user2Id 
+      : friendship.user1Id;
+    
     // Delete the friendship
     await prisma.friend.delete({
       where: { id: friendshipId }
+    });
+    
+    // Also delete any friend requests between these users
+    await prisma.friendRequest.deleteMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId }
+        ]
+      }
     });
     
     return NextResponse.json({
