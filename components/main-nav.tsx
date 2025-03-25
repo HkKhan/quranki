@@ -25,14 +25,38 @@ export function MainNav() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const isLoading = status === "loading";
   const [hasSettings, setHasSettings] = useState<boolean | null>(null);
   const isAuthenticated = status === "authenticated";
+  
+  // Add state to store user display name
+  const [userDisplayName, setUserDisplayName] = useState<string>('');
 
   // After hydration, we can safely show the UI that depends on the theme
   React.useEffect(() => {
     setMounted(true);
+  }, []);
+  
+  // Update display name from session
+  useEffect(() => {
+    if (session?.user) {
+      setUserDisplayName(session.user.name || session.user.email || '');
+    }
+  }, [session?.user]);
+  
+  // Listen for name change events
+  useEffect(() => {
+    const handleNameChange = (event: any) => {
+      const { name } = event.detail;
+      setUserDisplayName(name);
+    };
+    
+    window.addEventListener('user:nameChanged', handleNameChange);
+    
+    return () => {
+      window.removeEventListener('user:nameChanged', handleNameChange);
+    };
   }, []);
 
   // Check if the user has configured settings
@@ -44,7 +68,6 @@ export function MainNav() {
           const data = await response.json();
           setHasSettings(!!data.settings);
         } catch (error) {
-          console.error("Error checking user settings:", error);
           setHasSettings(false);
         }
       };
@@ -72,7 +95,7 @@ export function MainNav() {
           setHasSettings(!!data.settings);
         })
         .catch(error => {
-          console.error("Error checking settings:", error);
+          setHasSettings(false);
         });
     }
   };
@@ -282,9 +305,12 @@ export function MainNav() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
-                  {session?.user?.name || session?.user?.email}
+                  {userDisplayName || session?.user?.name || session?.user?.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">Profile</Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
                     signOut({ callbackUrl: "https://quranki.com" })
