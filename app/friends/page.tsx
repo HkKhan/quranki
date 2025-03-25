@@ -27,6 +27,7 @@ import {
   Share2,
   AlertCircle,
   Copy,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -86,6 +87,7 @@ export default function FriendsPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [activeTab, setActiveTab] = useState("friends");
+  const [requestSent, setRequestSent] = useState<{to: string; timestamp: number} | null>(null);
 
   // Fetch friends data
   useEffect(() => {
@@ -102,6 +104,17 @@ export default function FriendsPage() {
       router.push("/login");
     }
   }, [status, session?.user?.id, router]);
+
+  // Auto-hide request sent notification after 5 seconds
+  useEffect(() => {
+    if (requestSent) {
+      const timer = setTimeout(() => {
+        setRequestSent(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [requestSent]);
 
   const fetchFriendsData = async () => {
     try {
@@ -151,10 +164,21 @@ export default function FriendsPage() {
       const data = await response.json();
       
       if (response.ok) {
+        // Create a more visible toast notification
         toast({
-          title: "Success",
-          description: "Friend request sent successfully",
+          title: "Friend Request Sent",
+          description: `Friend request sent to ${searchEmail}`,
+          variant: "default",
         });
+        
+        // Show confirmation in UI using the temporary notification
+        setRequestSent({
+          to: searchEmail,
+          timestamp: Date.now()
+        });
+        
+        // Show confirmation in UI also
+        setSearchError(null);
         fetchFriendsData(); // Refresh data
         setSearchEmail("");
       } else {
@@ -210,6 +234,32 @@ export default function FriendsPage() {
   // Handle friend request response (accept/decline)
   const respondToFriendRequest = async (requestId: string, action: "accept" | "decline") => {
     try {
+      // Find the request being responded to
+      const request = pendingRequests.find((req) => req.id === requestId);
+      
+      // Optimistically update the UI
+      if (request) {
+        // Remove the request from pending requests
+        setPendingRequests((current) => 
+          current.filter((req) => req.id !== requestId)
+        );
+        
+        // If accepting, add to friends list optimistically
+        if (action === "accept" && request.sender) {
+          const optimisticFriend: FriendType = {
+            id: request.sender.id,
+            name: request.sender.name,
+            email: request.sender.email,
+            image: request.sender.image,
+            lastActive: null,
+            friendshipId: `temp-${requestId}`, // Temporary ID until we get the real one
+          };
+          
+          setFriends((current) => [...current, optimisticFriend]);
+        }
+      }
+      
+      // Make the API request
       const response = await fetch("/api/friend-requests", {
         method: "PATCH",
         headers: {
@@ -223,7 +273,9 @@ export default function FriendsPage() {
           title: "Success",
           description: `Friend request ${action === "accept" ? "accepted" : "declined"}`,
         });
-        fetchFriendsData(); // Refresh data
+        
+        // Fetch the updated data to ensure accuracy
+        fetchFriendsData();
       } else {
         const data = await response.json();
         toast({
@@ -231,6 +283,9 @@ export default function FriendsPage() {
           description: data.error || `Failed to ${action} friend request`,
           variant: "destructive",
         });
+        
+        // Revert the optimistic update on error
+        fetchFriendsData();
       }
     } catch (error) {
       console.error(`Error ${action}ing friend request:`, error);
@@ -239,6 +294,9 @@ export default function FriendsPage() {
         description: `Failed to ${action} friend request`,
         variant: "destructive",
       });
+      
+      // Revert the optimistic update on error
+      fetchFriendsData();
     }
   };
 
@@ -352,6 +410,27 @@ export default function FriendsPage() {
   return (
     <div className="container py-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Friends</h1>
+      
+      {/* Friend request sent notification */}
+      {requestSent && (
+        <div className="mb-6 bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 rounded-md p-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 mr-2" />
+            <p className="text-green-800 dark:text-green-200">
+              Friend request sent to <span className="font-bold">{requestSent.to}</span>
+            </p>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setRequestSent(null)}
+            className="h-8 w-8 p-0 rounded-full"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Dismiss</span>
+          </Button>
+        </div>
+      )}
       
       <Tabs defaultValue="friends" value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">

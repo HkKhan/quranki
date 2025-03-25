@@ -47,22 +47,24 @@ export function ToastProvider({
 
   React.useEffect(() => {
     const timer = setInterval(() => {
-      setToasts((current) => current.slice(1));
+      if (toasts.length > 0) {
+        setToasts((current) => current.slice(1));
+      }
     }, 5000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [toasts.length]);
 
   return (
     <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
       {children}
-      <div className="fixed bottom-0 right-0 z-50 flex flex-col gap-2 p-4 max-w-md">
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 p-4 max-w-md">
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="animate-slide-in-right"
+            className="animate-slide-in-right bg-white dark:bg-gray-800 rounded-md border shadow-lg p-4"
             onAnimationEnd={() => {
-              setTimeout(() => removeToast(toast.id), 300);
+              setTimeout(() => removeToast(toast.id), 5000);
             }}
           >
             <Toast {...toast} />

@@ -19,6 +19,7 @@ import {
 import Image from "next/image";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
 
 export function MainNav() {
   const pathname = usePathname();
@@ -29,6 +30,7 @@ export function MainNav() {
   const isLoading = status === "loading";
   const [hasSettings, setHasSettings] = useState<boolean | null>(null);
   const isAuthenticated = status === "authenticated";
+  const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   
   // Add state to store user display name
   const [userDisplayName, setUserDisplayName] = useState<string>('');
@@ -77,6 +79,31 @@ export function MainNav() {
       setHasSettings(null); // Reset for non-logged in users
     }
   }, [status, session?.user?.id, pathname]);
+  
+  // Fetch pending friend requests count
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      const fetchPendingRequests = async () => {
+        try {
+          const response = await fetch("/api/friends/pending-count");
+          if (response.ok) {
+            const data = await response.json();
+            setPendingFriendRequests(data.count || 0);
+          }
+        } catch (error) {
+          console.error("Error fetching pending friend requests:", error);
+        }
+      };
+      
+      // Fetch immediately when component mounts
+      fetchPendingRequests();
+      
+      // Set up polling every 30 seconds
+      const intervalId = setInterval(fetchPendingRequests, 30000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [status, session?.user?.id]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -101,7 +128,14 @@ export function MainNav() {
   };
 
   // Full routes for authenticated users
-  const authenticatedRoutes = [
+  interface NavRoute {
+    href: string;
+    label: string;
+    active: boolean;
+    notification?: number | null;
+  }
+  
+  const authenticatedRoutes: NavRoute[] = [
     {
       href: "/dashboard",
       label: "Dashboard",
@@ -116,6 +150,7 @@ export function MainNav() {
       href: "/friends",
       label: "Friends",
       active: pathname === "/friends",
+      notification: pendingFriendRequests > 0 ? pendingFriendRequests : null
     },
     {
       href: "/leaderboard",
@@ -135,7 +170,7 @@ export function MainNav() {
   ];
 
   // Limited routes for unauthenticated users
-  const unauthenticatedRoutes = [
+  const unauthenticatedRoutes: NavRoute[] = [
     {
       href: "/leaderboard",
       label: "Leaderboard",
@@ -167,7 +202,7 @@ export function MainNav() {
                       href={route.href}
                       onClick={(e) => handleNavigation(route.href, e)}
                       className={cn(
-                        "text-sm font-medium py-2 transition-colors hover:text-primary",
+                        "text-sm font-medium py-2 transition-colors hover:text-primary relative",
                         route.active
                           ? "border-l-2 border-primary pl-3 text-foreground"
                           : "text-foreground pl-4",
@@ -179,6 +214,11 @@ export function MainNav() {
                       )}
                     >
                       {route.label}
+                      {route.notification && (
+                        <Badge variant="destructive" className="ml-2 absolute right-2">
+                          {route.notification}
+                        </Badge>
+                      )}
                     </Link>
                   ))}
                 </nav>
@@ -270,24 +310,30 @@ export function MainNav() {
         {/* Desktop Navigation Menu */}
         <nav className="hidden md:flex items-center space-x-6 pr-6">
           {routes.map((route) => (
-            <Link
-              key={route.href}
-              href={route.href}
-              onClick={(e) => handleNavigation(route.href, e)}
-              className={cn(
-                "text-sm font-medium transition-colors hover:text-primary",
-                route.active
-                  ? "border-b-2 border-primary pb-2 text-foreground"
-                  : "text-foreground",
-                route.href === "/review" &&
-                  status === "authenticated" &&
-                  hasSettings === false
-                  ? "text-muted-foreground hover:text-primary/70"
-                  : ""
+            <div key={route.href} className="relative">
+              <Link
+                href={route.href}
+                onClick={(e) => handleNavigation(route.href, e)}
+                className={cn(
+                  "text-sm font-medium transition-colors hover:text-primary",
+                  route.active
+                    ? "border-b-2 border-primary pb-2 text-foreground"
+                    : "text-foreground",
+                  route.href === "/review" &&
+                    status === "authenticated" &&
+                    hasSettings === false
+                    ? "text-muted-foreground hover:text-primary/70"
+                    : ""
+                )}
+              >
+                {route.label}
+              </Link>
+              {route.notification && (
+                <Badge variant="destructive" className="absolute -top-2 -right-2 text-xs min-w-5 h-5 flex items-center justify-center">
+                  {route.notification}
+                </Badge>
               )}
-            >
-              {route.label}
-            </Link>
+            </div>
           ))}
         </nav>
         
