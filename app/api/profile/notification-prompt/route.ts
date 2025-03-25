@@ -8,14 +8,12 @@ export async function GET() {
     const session = await auth();
     
     if (!session || !session.user || !session.user.id) {
-      console.log('No authenticated session found');
       return NextResponse.json(
         { error: 'You must be logged in to check notification prompt status' },
         { status: 401 }
       );
     }
     
-    console.log('Checking notification prompt status for user:', session.user.id);
     
     try {
       // Get the user's notification settings using raw query to avoid Prisma client issues
@@ -34,7 +32,6 @@ export async function GET() {
       
       // If no settings exist or empty array, they haven't seen the prompt
       if (!settingsArray.length) {
-        console.log('No notification settings found for user');
         return NextResponse.json({
           hasSeenPrompt: false,
           hasEnabledNotifications: false
@@ -42,12 +39,6 @@ export async function GET() {
       }
       
       const settings = settingsArray[0];
-      
-      console.log('User notification settings:', {
-        hasSeenPrompt: !!settings.hasSeenPrompt,
-        optedIn: !!settings.optedIn,
-        pushNotifications: !!settings.pushNotifications
-      });
       
       return NextResponse.json({
         hasSeenPrompt: !!settings.hasSeenPrompt,
@@ -72,14 +63,12 @@ export async function POST(request: Request) {
     const session = await auth();
     
     if (!session || !session.user || !session.user.id) {
-      console.log('No authenticated session found for POST');
       return NextResponse.json(
         { error: 'You must be logged in to update notification prompt status' },
         { status: 401 }
       );
     }
     
-    console.log('Marking notification prompt as seen for user:', session.user.id);
     
     try {
       // Try to update existing settings first
@@ -91,7 +80,6 @@ export async function POST(request: Request) {
       
       // If no rows were updated, we need to create a new record
       if (updateResult === 0) {
-        console.log('No existing notification settings, creating new record');
         await prisma.$executeRaw`
           INSERT INTO "NotificationSettings" 
           ("id", "userId", "hasSeenPrompt", "optedIn", "pushNotifications", "dailyReminders", "weeklyReminders", "streakReminders", "createdAt", "updatedAt")
@@ -99,8 +87,6 @@ export async function POST(request: Request) {
           (gen_random_uuid(), ${session.user.id}, true, false, false, false, false, false, NOW(), NOW())
         `;
       }
-      
-      console.log('Successfully updated notification prompt status');
       
       return NextResponse.json({ success: true });
     } catch (dbError) {

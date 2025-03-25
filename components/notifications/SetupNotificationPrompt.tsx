@@ -21,8 +21,6 @@ export function SetupNotificationPrompt() {
         try {
           setLoading(true);
           setError(null);
-          
-          console.log('Setup page: Checking notification prompt status');
           const response = await fetch('/api/profile/notification-prompt');
           
           if (!response.ok) {
@@ -36,7 +34,6 @@ export function SetupNotificationPrompt() {
           let data;
           try {
             data = await response.json();
-            console.log('Setup page: Notification status data:', data);
           } catch (parseError) {
             console.error('Setup page: Error parsing notification response:', parseError);
             setError('Failed to parse server response');
@@ -45,10 +42,8 @@ export function SetupNotificationPrompt() {
           
           // If user has already seen the prompt or has notifications enabled, don't show it
           if (data.hasSeenPrompt || data.hasEnabledNotifications) {
-            console.log('Setup page: User has seen prompt or has notifications enabled');
             setDismissed(true);
           } else {
-            console.log('Setup page: Showing notification prompt');
             setDismissed(false);
           }
         } catch (error) {
@@ -67,7 +62,6 @@ export function SetupNotificationPrompt() {
 
   const handleEnableClick = async () => {
     try {
-      console.log('Setup page: Enabling notifications');
       // Mark the prompt as seen
       const response = await fetch('/api/profile/notification-prompt', {
         method: 'POST',
@@ -95,7 +89,6 @@ export function SetupNotificationPrompt() {
 
   const handleDismiss = async () => {
     try {
-      console.log('Setup page: Dismissing notification prompt');
       // Mark the prompt as seen
       const response = await fetch('/api/profile/notification-prompt', {
         method: 'POST',

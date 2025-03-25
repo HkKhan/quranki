@@ -69,6 +69,22 @@ function RegisterContent() {
           </div>
         )}
         <RegisterForm />
+        
+        {invitedBy && (
+          <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <div className="text-center space-y-4">
+              <p className="text-gray-600 dark:text-gray-400">
+                Already have an account?
+              </p>
+              <a 
+                href={`/login?invitedBy=${encodeURIComponent(invitedBy)}`}
+                className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Sign in and connect with {inviterDisplayName}
+              </a>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
