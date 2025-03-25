@@ -36,6 +36,9 @@ export default function ProfilePage() {
     newPassword: '',
     confirmPassword: '',
   });
+  
+  // Add a local state for the display name to ensure UI updates
+  const [displayName, setDisplayName] = useState('');
 
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
     optedIn: false,
@@ -48,14 +51,56 @@ export default function ProfilePage() {
   // Add state to keep track of the current tab
   const [currentTab, setCurrentTab] = useState('profile');
 
+  // Listen for the custom event for name changes
+  useEffect(() => {
+    const handleNameChange = (event: any) => {
+      const { name } = event.detail;
+      
+      // Update our local state
+      setDisplayName(name);
+      setFormData(prev => ({ ...prev, name }));
+    };
+    
+    window.addEventListener('user:nameChanged', handleNameChange);
+    
+    return () => {
+      window.removeEventListener('user:nameChanged', handleNameChange);
+    };
+  }, []);
+
   // Format user's name or email for display
   const getUserDisplayName = () => {
+    // First check our local state
+    if (displayName) return displayName;
+    
+    // Otherwise fall back to session data
     if (!session?.user) return '';
     return session.user.name || session.user.email || '';
   };
 
+  // Add an effect to update the form data and display name when the session changes
+  useEffect(() => {
+    if (session?.user) {
+      // Update both form data and display name
+      const newName = session.user?.name || '';
+      
+      setFormData(prevData => ({
+        ...prevData,
+        name: newName,
+        email: session.user?.email || '',
+      }));
+      
+      setDisplayName(newName);
+    }
+  }, [session?.user?.name, session?.user?.email]);
+
   // Get initials for avatar fallback
   const getInitials = () => {
+    // First check our local state
+    if (displayName) {
+      return displayName.split(' ').map(part => part[0]).join('').toUpperCase();
+    }
+    
     if (!session?.user) return '';
     if (session.user.name) {
       return session.user.name.split(' ').map(part => part[0]).join('').toUpperCase();
@@ -76,7 +121,6 @@ export default function ProfilePage() {
 
   // Load user data
   useEffect(() => {
-    console.log('ProfilePage: Status changed to', status, 'Loading:', loading);
     let isMounted = true;
     
     // Set initial loading state
@@ -110,7 +154,6 @@ export default function ProfilePage() {
     
     // Cleanup function
     return () => {
-      console.log('ProfilePage: Cleaning up');
       isMounted = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,11 +163,9 @@ export default function ProfilePage() {
   const fetchNotificationSettings = async () => {
     try {
       setLoading(true);
-      console.log('Fetching notification settings...');
       const response = await fetch('/api/profile/notifications');
       
       if (!response.ok) {
-        console.error('Failed to fetch notification settings:', response.status);
         // Set default values on error
         setNotificationSettings({
           optedIn: false,
@@ -137,7 +178,6 @@ export default function ProfilePage() {
       }
       
       if (response.status === 204) {
-        console.log('No notification settings found, using defaults');
         setNotificationSettings({
           optedIn: false,
           emailNotifications: true,
@@ -151,7 +191,6 @@ export default function ProfilePage() {
       const text = await response.text();
       
       if (!text) {
-        console.log('Empty response from notification settings API, using defaults');
         setNotificationSettings({
           optedIn: false,
           emailNotifications: true,
@@ -164,7 +203,6 @@ export default function ProfilePage() {
       
       try {
         const data = JSON.parse(text);
-        console.log('Notification settings fetched successfully:', data);
         setNotificationSettings({
           optedIn: data.optedIn ?? false,
           emailNotifications: data.emailNotifications ?? true,
@@ -173,7 +211,6 @@ export default function ProfilePage() {
           streakReminders: data.streakReminders ?? false,
         });
       } catch (parseError) {
-        console.error('Error parsing notification settings JSON:', parseError);
         // Set default values on parsing error
         setNotificationSettings({
           optedIn: false,
@@ -184,7 +221,6 @@ export default function ProfilePage() {
         });
       }
     } catch (err) {
-      console.error('Error fetching notification settings:', err);
       // Set default values on any error
       setNotificationSettings({
         optedIn: false,
@@ -194,7 +230,6 @@ export default function ProfilePage() {
         streakReminders: false,
       });
     } finally {
-      console.log('Fetch notification settings completed');
       setLoading(false);
     }
   };
@@ -213,7 +248,6 @@ export default function ProfilePage() {
     
     try {
       setLoading(true);
-      console.log('Updating profile with name:', formData.name);
       
       const response = await fetch('/api/profile/update', {
         method: 'POST',
@@ -231,41 +265,31 @@ export default function ProfilePage() {
         throw new Error(data.error || 'Failed to update profile');
       }
       
-      console.log('Profile updated successfully:', data);
       setSuccess('Profile updated successfully');
       
-      // Update the local session state first
-      await update({
-        name: formData.name,
-      });
+      // Update local display name state immediately
+      setDisplayName(formData.name);
       
-      // Update the UI immediately without waiting for the session to update
-      if (session?.user) {
-        // Create a new session object with the updated name
-        const updatedSession = {
-          ...session,
-          user: {
-            ...session.user,
-            name: formData.name
-          }
-        };
-        
-        // Force the session context to update
-        // @ts-ignore - This is a workaround to force update the session
-        update(updatedSession);
-      }
+      // Force a complete session refresh to ensure global updates
+      await fetch('/api/auth/session?forceUpdate=1');
       
-      // Refresh the router to update any router-dependent components
+      // Use the update function to update the session with the new name
+      await update({ name: formData.name });
+      
+      // Force router refresh to update navigation components
       router.refresh();
       
-      // Force a reload after a short delay if the name hasn't updated in the UI
-      // This is a fallback method to ensure the name gets updated
-      setTimeout(() => {
-        if (document.querySelector('.text-2xl.font-bold')?.textContent !== formData.name) {
-          console.log('Name not updated in UI, forcing reload');
-          window.location.reload();
-        }
-      }, 1500);
+      // Directly update form data to ensure UI consistency
+      setFormData(prevData => ({
+        ...prevData,
+        name: formData.name,
+      }));
+      
+      // Publish a custom event that other components can listen for
+      const nameChangeEvent = new CustomEvent('user:nameChanged', { 
+        detail: { name: formData.name } 
+      });
+      window.dispatchEvent(nameChangeEvent);
     } catch (err: any) {
       setError(err.message || 'Failed to update profile');
     } finally {
@@ -343,7 +367,6 @@ export default function ProfilePage() {
       setSuccess('Notification settings updated successfully.');
     } catch (err: any) {
       setError(err.message || 'Failed to update notification settings');
-      console.error('Error updating notification settings:', err);
     } finally {
       setLoading(false);
     }
@@ -365,7 +388,6 @@ export default function ProfilePage() {
   };
 
   if (status === 'loading') {
-    console.log('ProfilePage: Rendering loading spinner due to auth status');
     return (
       <div className="container flex items-center justify-center min-h-[60vh]">
         <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
@@ -375,7 +397,6 @@ export default function ProfilePage() {
   
   // Also show loading spinner when doing async operations, but only if authenticated
   if (loading && status === 'authenticated') {
-    console.log('ProfilePage: Rendering loading spinner due to async operations');
     return (
       <div className="container flex items-center justify-center min-h-[60vh]">
         <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-primary" />
@@ -384,7 +405,6 @@ export default function ProfilePage() {
   }
 
   if (status === 'unauthenticated') {
-    console.log('ProfilePage: Rendering unauthenticated state');
     return (
       <div className="container max-w-4xl py-10">
         <Alert variant="destructive">
@@ -401,7 +421,6 @@ export default function ProfilePage() {
     );
   }
 
-  console.log('ProfilePage: Rendering normal profile page');
   return (
     <div className="container max-w-4xl py-10 space-y-8">
       <div className="flex items-center space-x-4">
@@ -413,7 +432,10 @@ export default function ProfilePage() {
           )}
         </Avatar>
         <div>
-          <h1 className="text-2xl font-bold" key={session?.user?.name || 'user'}>
+          <h1 
+            className="text-2xl font-bold" 
+            data-testid="profile-name"
+          >
             {getUserDisplayName()}
           </h1>
           <p className="text-muted-foreground">{session?.user?.email}</p>

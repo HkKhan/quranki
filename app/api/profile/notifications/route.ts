@@ -13,18 +13,14 @@ interface NotificationUpdateData {
 // GET - Fetch notification settings
 export async function GET() {
   try {
-    console.log("Notification settings GET endpoint called");
     const session = await auth();
     
     if (!session || !session.user || !session.user.id) {
-      console.log("User not authenticated");
       return NextResponse.json(
         { error: 'You must be logged in to view notification settings' },
         { status: 401 }
       );
     }
-    
-    console.log(`Fetching notification settings for user ${session.user.id}`);
     
     try {
       // Using findFirst as a fallback in case unique constraints aren't working correctly
@@ -37,7 +33,6 @@ export async function GET() {
       
       // Return empty settings if none exist yet
       if (!settingsData) {
-        console.log(`No notification settings found for user ${session.user.id}, returning defaults`);
         return NextResponse.json({ 
           optedIn: false,
           emailNotifications: true,
@@ -47,7 +42,6 @@ export async function GET() {
         });
       }
       
-      console.log(`Found notification settings for user ${session.user.id}`);
       return NextResponse.json({ 
         optedIn: settingsData.optedIn,
         emailNotifications: settingsData.emailNotifications ?? true,

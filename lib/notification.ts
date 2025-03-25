@@ -26,13 +26,6 @@ export async function sendEmailNotification({
   }
 
   try {
-    // Development mode: Just log the email instead of sending (if client-side)
-    if (process.env.NODE_ENV === 'development' && isBrowser) {
-      console.log('📧 Email would be sent to:', email);
-      console.log('📝 Subject:', subject);
-      console.log('📝 Message:', message);
-      return true;
-    }
 
     // Server-side: Use our email API to send the email
     const apiUrl = isBrowser
@@ -41,8 +34,6 @@ export async function sendEmailNotification({
     
     // Get the API key - handle both client and server side contexts
     const apiKey = process.env.NOTIFICATION_API_KEY || '';
-    
-    console.log('Sending email notification to:', email);
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -63,8 +54,6 @@ export async function sendEmailNotification({
       console.error('Failed to send email notification:', errorData);
       return false;
     }
-    
-    console.log('Email notification sent successfully');
     return true;
   } catch (error) {
     console.error('Error sending email notification:', error);

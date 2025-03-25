@@ -410,8 +410,6 @@ export default function DashboardPage() {
         });
       }
 
-      console.log("Today's date (local):", today); // Debug log
-
       // Use review stats API data if available
       if (reviewStatsData.success && reviewStatsData.reviewStats) {
         // If we have review stats, use those for dailyReviews
@@ -423,9 +421,6 @@ export default function DashboardPage() {
           });
         }
 
-        // Debug log to see what dates are in the daily reviews
-        console.log("Daily reviews dates:", Object.keys(dailyReviews));
-        console.log("Looking for reviews on date:", today);
 
         // If we have due items from the review stats API, update dueToday
         if (reviewStatsData.reviewStats.dueItems && dueToday === 0) {
@@ -491,9 +486,6 @@ export default function DashboardPage() {
       const dailyAverage = daysWithActivity > 0 
         ? totalDailyReviews / daysWithActivity 
         : 0;
-
-      // Debug log for today's reviews
-      console.log("Reviews for today:", dailyReviews[today] || 0);
 
       // Update review stats
       setReviewStats({

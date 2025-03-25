@@ -16,9 +16,6 @@ export async function POST(request: Request) {
     
     const data = await request.json();
     const { name } = data;
-    
-    console.log(`Updating profile for user ${session.user.id}: Setting name to "${name}"`);
-    
     // Validate name
     if (!name || name.trim() === '') {
       console.error('Profile update failed: Empty name provided');
@@ -38,8 +35,6 @@ export async function POST(request: Request) {
           name: name.trim(),
         },
       });
-      
-      console.log('User profile updated successfully:', updatedUser.id, updatedUser.name);
       
       return NextResponse.json({ 
         success: true, 

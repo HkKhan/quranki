@@ -39,8 +39,6 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`Sending test notification to ${userEmail}`);
-
     // Send a test notification with all three types of content
     const testMessage = `
 Assalamu Alaikum ${userName},
@@ -77,7 +75,6 @@ The QuranKi Team
     });
 
     if (success) {
-      console.log('Test notification sent successfully');
       return NextResponse.json({ 
         success: true,
         message: 'Test notification sent successfully' 

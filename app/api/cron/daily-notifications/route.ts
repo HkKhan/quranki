@@ -34,8 +34,6 @@ export async function GET(request: Request) {
       },
     });
     
-    console.log(`Found ${users.length} users to notify`);
-    
     // Send notifications to each eligible user
     const results = await Promise.all(
       users.map(async (user) => {
