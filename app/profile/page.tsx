@@ -608,187 +608,126 @@ export default function ProfilePage() {
         </TabsContent>
         
         {/* Notifications */}
-        <TabsContent value="notifications">
+        <TabsContent value="notifications" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Notification Settings</CardTitle>
               <CardDescription>
-                Manage how you receive notifications from QuranKi.
+                Configure how and when you want to receive notifications about your Quran review progress.
               </CardDescription>
             </CardHeader>
-            <form onSubmit={handleUpdateNotifications}>
-              <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
+              <div className="flex flex-col space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="notifications">Receive Notifications</Label>
+                  <div>
+                    <Label htmlFor="push-notifications">Push Notifications</Label>
                     <p className="text-sm text-muted-foreground">
-                      Get reminders for your Quran review sessions as push notifications.
+                      Allow browser notifications to stay updated about your Quran review progress
                     </p>
                   </div>
                   <Switch
-                    id="notifications"
-                    checked={notificationSettings.optedIn}
-                    onCheckedChange={(checked) => setNotificationSettings(prev => ({
-                      ...prev,
-                      optedIn: checked
-                    }))}
+                    id="push-notifications"
+                    checked={notificationSettings.pushNotifications}
+                    onCheckedChange={(checked) => {
+                      setNotificationSettings(prev => ({
+                        ...prev,
+                        pushNotifications: checked,
+                        optedIn: checked
+                      }));
+                      saveNotificationSettings();
+                    }}
                   />
                 </div>
-                
-                {notificationSettings.optedIn && (
-                  <div className="space-y-4 border-t pt-4">
-                    <div>
-                      <h3 className="font-medium mb-2">Push Notifications</h3>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Enable browser notifications to receive reminders directly on your device.
-                      </p>
-                      
-                      <div className="space-y-3">
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            id="pushNotifications"
-                            checked={notificationSettings.pushNotifications}
-                            onCheckedChange={(checked) => 
-                              setNotificationSettings(prev => ({
-                                ...prev,
-                                pushNotifications: checked
-                              }))
-                            }
-                          />
-                          <Label htmlFor="pushNotifications" className="font-medium cursor-pointer">
-                            Browser Push Notifications
-                          </Label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-8">
-                          Receive notifications in your browser (recommended)
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <h3 className="font-medium mb-2">Notification Types</h3>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Select which types of notifications you'd like to receive:
-                      </p>
-                      
-                      <div className="space-y-3">
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            id="dailyReminders"
-                            checked={notificationSettings.dailyReminders}
-                            onCheckedChange={(checked) => 
-                              setNotificationSettings(prev => ({
-                                ...prev,
-                                dailyReminders: checked
-                              }))
-                            }
-                          />
-                          <Label htmlFor="dailyReminders" className="font-medium cursor-pointer">
-                            Daily Reminders
-                          </Label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-8">
-                          Receive a daily reminder to maintain your streak
-                        </p>
-                        
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            id="weeklyReminders"
-                            checked={notificationSettings.weeklyReminders}
-                            onCheckedChange={(checked) => 
-                              setNotificationSettings(prev => ({
-                                ...prev,
-                                weeklyReminders: checked
-                              }))
-                            }
-                          />
-                          <Label htmlFor="weeklyReminders" className="font-medium cursor-pointer">
-                            Weekly Summary
-                          </Label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-8">
-                          Receive a weekly summary of your progress
-                        </p>
-                        
-                        <div className="flex items-center space-x-2">
-                          <Switch
-                            id="streakReminders"
-                            checked={notificationSettings.streakReminders}
-                            onCheckedChange={(checked) => 
-                              setNotificationSettings(prev => ({
-                                ...prev,
-                                streakReminders: checked
-                              }))
-                            }
-                          />
-                          <Label htmlFor="streakReminders" className="font-medium cursor-pointer">
-                            Streak Alerts
-                          </Label>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-8">
-                          Receive a notification when you're about to lose your streak
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2 pt-2">
-                      <div className="flex-1 space-y-1">
-                        <div className="font-medium">Notification Email</div>
+
+                {notificationSettings.pushNotifications && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="daily-reminders">Daily Reminders</Label>
                         <p className="text-sm text-muted-foreground">
-                          Notifications will be sent to: <span className="font-medium">{session?.user?.email}</span>
+                          Get reminded to do your daily Quran review
                         </p>
                       </div>
-                      <div className="rounded-full bg-green-100 p-1 dark:bg-green-800">
-                        <Check className="h-5 w-5 text-green-600 dark:text-green-300" />
-                      </div>
+                      <Switch
+                        id="daily-reminders"
+                        checked={notificationSettings.dailyReminders}
+                        onCheckedChange={(checked) => {
+                          setNotificationSettings(prev => ({
+                            ...prev,
+                            dailyReminders: checked
+                          }));
+                          saveNotificationSettings();
+                        }}
+                      />
                     </div>
 
-                    {/* Dev-only test notification */}
-                    {process.env.NODE_ENV === 'development' && (
-                      <div className="pt-4 border-t">
-                        <h3 className="font-medium mb-2">Development Testing</h3>
-                        <Button 
-                          type="button" 
-                          variant="outline"
-                          onClick={async () => {
-                            try {
-                              setLoading(true);
-                              const response = await fetch('/api/test-notification', {
-                                method: 'POST',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                }
-                              });
-                              
-                              if (!response.ok) {
-                                const errorData = await response.json();
-                                throw new Error(errorData.error || errorData.message || 'Failed to send test notification');
-                              }
-                              
-                              setSuccess('Test notification sent successfully!');
-                            } catch (err: any) {
-                              setError(err.message || 'Failed to send test notification');
-                              console.error(err);
-                            } finally {
-                              setLoading(false);
-                            }
-                          }}
-                        >
-                          Send Test Notification
-                        </Button>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          This will send a test push notification to your browser.
-                          Only visible in development mode.
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="streak-reminders">Streak Alerts</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Get notified when your streak is at risk
                         </p>
                       </div>
-                    )}
-                  </div>
+                      <Switch
+                        id="streak-reminders"
+                        checked={notificationSettings.streakReminders}
+                        onCheckedChange={(checked) => {
+                          setNotificationSettings(prev => ({
+                            ...prev,
+                            streakReminders: checked
+                          }));
+                          saveNotificationSettings();
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="weekly-reminders">Weekly Summary</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Receive a weekly summary of your progress
+                        </p>
+                      </div>
+                      <Switch
+                        id="weekly-reminders"
+                        checked={notificationSettings.weeklyReminders}
+                        onCheckedChange={(checked) => {
+                          setNotificationSettings(prev => ({
+                            ...prev,
+                            weeklyReminders: checked
+                          }));
+                          saveNotificationSettings();
+                        }}
+                      />
+                    </div>
+                  </>
                 )}
-              </CardContent>
-              <CardFooter>
-                <Button type="submit">Save Notification Settings</Button>
-              </CardFooter>
-            </form>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button 
+                variant="outline" 
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/test-notification', {
+                      method: 'POST',
+                    });
+                    
+                    if (!response.ok) {
+                      const data = await response.json();
+                      setError(data.message || 'Failed to send test notification');
+                      return;
+                    }
+                    
+                    setSuccess('Test notification sent! Check your browser notifications.');
+                  } catch (error) {
+                    setError('Failed to send test notification');
+                  }
+                }}
+              >
+                Send Test Notification
+              </Button>
+            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>

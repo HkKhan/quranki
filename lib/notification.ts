@@ -55,15 +55,14 @@ export async function sendPushNotification({
     console.log('Starting push notification process for user:', userId);
     
     // Get the user's notification settings and FCM token
-    const notificationSettings = await prisma.$queryRaw`
-      SELECT "fcmToken", "optedIn", "pushNotifications" 
-      FROM "NotificationSettings" 
-      WHERE "userId" = ${userId}
-    `;
-    
-    const userSettings = Array.isArray(notificationSettings) && notificationSettings.length > 0 
-      ? notificationSettings[0] 
-      : null;
+    const userSettings = await prisma.notificationSettings.findUnique({
+      where: { userId },
+      select: {
+        fcmToken: true,
+        optedIn: true,
+        pushNotifications: true
+      }
+    });
     
     if (!userSettings || !userSettings.optedIn || !userSettings.pushNotifications || !userSettings.fcmToken) {
       console.log(`Push notification skipped for user ${userId}: `, {
@@ -135,16 +134,17 @@ export async function sendBatchPushNotifications({
     }
 
     // Get FCM tokens for all users who have opted in
-    const userSettingsRaw = await prisma.$queryRaw`
-      SELECT "userId", "fcmToken"
-      FROM "NotificationSettings"
-      WHERE "userId" IN (${Prisma.join(userIds)})
-      AND "optedIn" = true
-      AND "pushNotifications" = true
-      AND "fcmToken" IS NOT NULL
-    `;
-    
-    const userSettings = Array.isArray(userSettingsRaw) ? userSettingsRaw : [];
+    const userSettings = await prisma.notificationSettings.findMany({
+      where: {
+        userId: { in: userIds },
+        optedIn: true,
+        pushNotifications: true,
+        fcmToken: { not: null }
+      },
+      select: {
+        fcmToken: true
+      }
+    });
 
     if (!userSettings.length) {
       console.log('No eligible users for batch notifications');
@@ -155,14 +155,13 @@ export async function sendBatchPushNotifications({
     const admin = await initializeFirebaseAdmin();
     const messaging = getMessaging(admin.app());
     
-    // Process in batches of 500 (FCM limit)
+    // Extract tokens
+    const tokens = userSettings.map(setting => setting.fcmToken!).filter(Boolean);
+    
+    // Send in batches of 500 (Firebase limit)
     let successCount = 0;
     let failedCount = 0;
     
-    // Extract tokens
-    const tokens = userSettings.map(setting => setting.fcmToken).filter(Boolean);
-    
-    // Send in batches of 500 (Firebase limit)
     for (let i = 0; i < tokens.length; i += 500) {
       const batchTokens = tokens.slice(i, i + 500);
       

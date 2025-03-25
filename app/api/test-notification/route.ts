@@ -5,14 +5,6 @@ import { prisma } from '@/lib/prisma';
 
 // POST endpoint for test notifications
 export async function POST(request: Request) {
-  // Ensure this endpoint only works in development
-  if (process.env.NODE_ENV !== 'development') {
-    return NextResponse.json(
-      { error: 'This endpoint is only available in development mode' },
-      { status: 403 }
-    );
-  }
-
   try {
     const session = await auth();
     
@@ -23,9 +15,6 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
-    
-    // Get user FCM token
-    const userName = session.user.name || 'Test User';
     
     // Get user notification settings
     const notificationSettings = await prisma.notificationSettings.findUnique({
@@ -58,50 +47,39 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Create test notification message
-    const testTitle = 'QuranKi Test Notification';
-    const testMessage = `
-This is a TEST notification from QuranKi. 
-
-Here's a sample of the different types of notifications you might receive:
-
-1. DAILY REMINDER:
-You currently have a 5-day streak! MashaAllah, keep it up!
-
-2. STREAK ALERT:
-Your streak is at risk! You have approximately 4 hours to complete today's review.
-
-3. WEEKLY SUMMARY:
-- Current streak: 5 days
-- Reviews this week: 24
-- Total reviews: 125
-
-Keep up the great work! Remember, consistency is key to memorizing and maintaining your Quran knowledge.
-
-This is a test message sent at ${new Date().toLocaleString()}.
-    `;
-
-    // Send push notification
+    // Send push notification with more detailed payload
     const success = await sendPushNotification({
       userId: session.user.id,
-      title: testTitle,
-      body: 'This is a test push notification from QuranKi. Tap to see more details.',
+      title: '🔔 Test Notification',
+      body: 'This is a test notification from QuranKi. If you see this, notifications are working!',
       data: {
         type: 'test',
-        message: testMessage.substring(0, 100) + '...',
-        timestamp: new Date().toISOString()
+        url: '/profile',
+        timestamp: new Date().toISOString(),
+        userId: session.user.id,
+        source: 'test_notification'
       }
     });
 
     if (success) {
       return NextResponse.json({ 
         success: true,
-        message: 'Test push notification sent successfully'
+        message: 'Test notification sent successfully',
+        debug: {
+          userId: session.user.id,
+          fcmToken: notificationSettings.fcmToken.substring(0, 10) + '...',
+          timestamp: new Date().toISOString()
+        }
       });
     } else {
       return NextResponse.json({
         success: false,
-        message: 'Failed to send test notification. Please check your browser notification settings.',
+        message: 'Failed to send notification. Please check your browser notification settings.',
+        debug: {
+          userId: session.user.id,
+          fcmToken: notificationSettings.fcmToken.substring(0, 10) + '...',
+          timestamp: new Date().toISOString()
+        }
       }, { status: 500 });
     }
   } catch (error) {

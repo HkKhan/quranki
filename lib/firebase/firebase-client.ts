@@ -29,6 +29,7 @@ let messaging: Messaging | null = null;
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   try {
     messaging = getMessaging(app);
+    console.log('Firebase Messaging initialized successfully');
   } catch (error) {
     console.error('Error initializing FCM:', error);
   }
@@ -36,21 +37,28 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
 // Request permission and get FCM token
 export async function requestNotificationPermission(): Promise<string | null> {
-  if (!messaging) return null;
+  console.log('Requesting notification permission...');
+  
+  if (!messaging) {
+    console.error('Firebase Messaging is not initialized');
+    return null;
+  }
 
   try {
     // Check if notification permission is already granted
     if (Notification.permission === 'granted') {
+      console.log('Notification permission already granted');
       return await getFCMToken();
     }
 
     // Request permission from the user
     const permission = await Notification.requestPermission();
+    console.log('Notification permission status:', permission);
     
     if (permission === 'granted') {
       return await getFCMToken();
     } else {
-      console.log('Notification permission denied');
+      console.log('Notification permission denied by user');
       return null;
     }
   } catch (error) {
@@ -61,19 +69,29 @@ export async function requestNotificationPermission(): Promise<string | null> {
 
 // Get the FCM token
 export async function getFCMToken(): Promise<string | null> {
-  if (!messaging) return null;
+  if (!messaging) {
+    console.error('Firebase Messaging is not initialized');
+    return null;
+  }
+
+  const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+  if (!vapidKey) {
+    console.error('NEXT_PUBLIC_FIREBASE_VAPID_KEY is not set');
+    return null;
+  }
 
   try {
+    console.log('Getting FCM token...');
     // Get registration token. This requires the user to have allowed notifications
     const currentToken = await getToken(messaging, {
-      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+      vapidKey: vapidKey,
     });
 
     if (currentToken) {
-      // Save the token to your database
+      console.log('FCM token obtained:', currentToken.substring(0, 10) + '...');
       return currentToken;
     } else {
-      console.log('No registration token available. Request permission to generate one.');
+      console.log('No registration token available');
       return null;
     }
   } catch (error) {
@@ -84,12 +102,19 @@ export async function getFCMToken(): Promise<string | null> {
 
 // Set up the foreground message handler
 export function setupOnMessage(callback: (payload: MessagePayload) => void) {
-  if (!messaging) return;
+  if (!messaging) {
+    console.error('Firebase Messaging is not initialized');
+    return;
+  }
 
-  return onMessage(messaging, (payload) => {
-    console.log('Message received in the foreground:', payload);
-    callback(payload);
-  });
+  try {
+    return onMessage(messaging, (payload) => {
+      console.log('Message received in the foreground:', payload);
+      callback(payload);
+    });
+  } catch (error) {
+    console.error('Error setting up message handler:', error);
+  }
 }
 
 export { app, analytics, messaging }; 

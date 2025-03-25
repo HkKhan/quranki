@@ -1,57 +1,76 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/auth';
 import { prisma } from '@/lib/prisma';
+import { sendPushNotification } from '@/lib/notification';
 
-// POST - Register FCM token for push notifications
+// POST - Update FCM token
 export async function POST(request: Request) {
   try {
     const session = await auth();
     
-    // Check authentication
     if (!session || !session.user || !session.user.id) {
       return NextResponse.json(
-        { error: 'You must be logged in to register for push notifications' },
+        { error: 'You must be logged in to update FCM token' },
         { status: 401 }
       );
     }
     
-    // Get FCM token from request
-    const { token } = await request.json();
+    const data = await request.json();
+    const { token } = data;
     
     if (!token) {
       return NextResponse.json(
-        { error: 'No FCM token provided' },
+        { error: 'FCM token is required' },
         { status: 400 }
       );
     }
     
-    // Update or create notification settings with FCM token
     try {
-      const settings = await prisma.notificationSettings.upsert({
+      // Get existing settings to check if this is a new registration
+      const existingSettings = await prisma.notificationSettings.findUnique({
+        where: { userId: session.user.id },
+        select: { fcmToken: true }
+      });
+
+      const isNewRegistration = !existingSettings?.fcmToken;
+      
+      // Use upsert to create or update notification settings with the FCM token
+      const updatedSettings = await prisma.notificationSettings.upsert({
         where: {
           userId: session.user.id
         },
-        update: {
-          fcmToken: token,
-          fcmTokenCreatedAt: new Date(),
-          pushNotifications: true
-        },
         create: {
           userId: session.user.id,
-          optedIn: true,
-          pushNotifications: true,
-          emailNotifications: true,
           fcmToken: token,
           fcmTokenCreatedAt: new Date(),
-          dailyReminders: false,
-          weeklyReminders: false,
-          streakReminders: false
+          optedIn: true,
+          pushNotifications: true,
+          dailyReminders: true,
+          weeklyReminders: true,
+          streakReminders: true
+        },
+        update: {
+          fcmToken: token,
+          fcmTokenCreatedAt: new Date()
         }
       });
+
+      // Send welcome notification only in production and only for new registrations
+      if (isNewRegistration && process.env.NODE_ENV === 'production') {
+        await sendPushNotification({
+          userId: session.user.id,
+          title: '🎉 Welcome to QuranKi Notifications!',
+          body: 'You will now receive reminders for your daily Quran review, streak alerts, and weekly summaries.',
+          data: {
+            type: 'welcome',
+            url: '/profile'
+          }
+        });
+      }
       
-      return NextResponse.json({
+      return NextResponse.json({ 
         success: true,
-        message: 'FCM token registered successfully'
+        message: 'FCM token updated successfully'
       });
     } catch (dbError) {
       console.error('Database error saving FCM token:', dbError);
@@ -61,9 +80,9 @@ export async function POST(request: Request) {
       );
     }
   } catch (error) {
-    console.error('Error registering FCM token:', error);
+    console.error('Error updating FCM token:', error);
     return NextResponse.json(
-      { error: 'Failed to register FCM token' },
+      { error: 'Failed to update FCM token' },
       { status: 500 }
     );
   }
