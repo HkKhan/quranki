@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/auth';
 import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 
 interface EmailPayload {
   to: string;
@@ -9,18 +10,76 @@ interface EmailPayload {
   from: string;
 }
 
-// Creates a nodemailer transporter using Gmail SMTP
-function createTransporter() {
+// Creates a nodemailer transporter using Gmail with OAuth2
+async function createTransporter() {
   const email = process.env.NOTIFICATION_EMAIL || 'contactquranki@gmail.com';
   console.log('Creating email transporter for:', email);
   
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: email,
-      pass: process.env.NOTIFICATION_EMAIL_PASSWORD,
-    },
-  });
+  // Use password-based auth as fallback in development
+  if (process.env.NODE_ENV === 'development' && process.env.NOTIFICATION_EMAIL_PASSWORD) {
+    console.log('Using password-based authentication (development mode)');
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: email,
+        pass: process.env.NOTIFICATION_EMAIL_PASSWORD,
+      },
+    });
+  }
+  
+  try {
+    // Use OAuth2 authentication (preferred for production)
+    console.log('Attempting to use OAuth2 authentication');
+    
+    // Check if OAuth credentials are available
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || 
+        !process.env.GMAIL_REFRESH_TOKEN) {
+      console.error('Missing OAuth2 credentials');
+      throw new Error('Missing required OAuth2 credentials');
+    }
+    
+    // Create OAuth2 client
+    const OAuth2 = google.auth.OAuth2;
+    const oauth2Client = new OAuth2(
+      process.env.GMAIL_CLIENT_ID,
+      process.env.GMAIL_CLIENT_SECRET,
+      'https://developers.google.com/oauthplayground'
+    );
+    
+    // Set refresh token
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN
+    });
+    
+    // Get access token
+    const accessToken = await new Promise<string>((resolve, reject) => {
+      oauth2Client.getAccessToken((err: Error | null, token: string | null | undefined) => {
+        if (err) {
+          console.error('Failed to get access token:', err);
+          reject(err);
+        }
+        resolve(token as string);
+      });
+    });
+    
+    console.log('Successfully retrieved OAuth2 access token');
+    
+    // Create transporter with OAuth2
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: email,
+        clientId: process.env.GMAIL_CLIENT_ID,
+        clientSecret: process.env.GMAIL_CLIENT_SECRET,
+        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+        accessToken: accessToken,
+      },
+    });
+  } catch (error) {
+    console.error('Error setting up OAuth2:', error);
+    throw error;
+  }
 }
 
 // Use Google's SMTP to send emails directly
@@ -98,7 +157,7 @@ export async function POST(request: Request) {
     // Create a transporter with Gmail SMTP
     try {
       console.log('Attempting to create email transporter...');
-      const transporter = createTransporter();
+      const transporter = await createTransporter();
       
       // Send email using Gmail
       console.log('Attempting to send email...');
@@ -125,7 +184,8 @@ export async function POST(request: Request) {
         error: emailError.message,
         code: emailError.code,
         command: emailError.command,
-        response: emailError.response
+        response: emailError.response,
+        stack: emailError.stack
       });
       throw new Error(`Failed to send email: ${emailError.message}`);
     }
