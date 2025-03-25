@@ -8,6 +8,7 @@ interface NotificationUpdateData {
   dailyReminders: boolean;
   weeklyReminders: boolean;
   streakReminders: boolean;
+  hasSeenPrompt?: boolean;
 }
 
 // Helper function to generate notification settings summary
@@ -37,31 +38,44 @@ export async function GET() {
     }
     
     try {
-      const userSettings = await prisma.notificationSettings.findUnique({
-        where: {
-          userId: session.user.id
-        },
-        select: {
-          optedIn: true,
-          pushNotifications: true,
-          dailyReminders: true,
-          weeklyReminders: true,
-          streakReminders: true
-        }
-      });
+      // Use raw query to avoid Prisma client issues with the schema
+      const userSettings = await prisma.$queryRaw`
+        SELECT 
+          "optedIn", 
+          "pushNotifications", 
+          "dailyReminders", 
+          "weeklyReminders", 
+          "streakReminders",
+          "hasSeenPrompt"
+        FROM "NotificationSettings" 
+        WHERE "userId" = ${session.user.id}
+      `;
+      
+      // Convert result to array if it's not already
+      const settingsArray = Array.isArray(userSettings) ? userSettings : [userSettings];
       
       // Return empty settings if none exist yet
-      if (!userSettings) {
+      if (!settingsArray.length) {
         return NextResponse.json({ 
           optedIn: false,
           pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
-          streakReminders: false
+          streakReminders: false,
+          hasSeenPrompt: false
         });
       }
       
-      return NextResponse.json(userSettings);
+      const settings = settingsArray[0];
+      
+      return NextResponse.json({
+        optedIn: !!settings.optedIn,
+        pushNotifications: !!settings.pushNotifications,
+        dailyReminders: !!settings.dailyReminders,
+        weeklyReminders: !!settings.weeklyReminders,
+        streakReminders: !!settings.streakReminders,
+        hasSeenPrompt: !!settings.hasSeenPrompt
+      });
     } catch (dbError) {
       console.error('Database error fetching notification settings:', dbError);
       return NextResponse.json(
@@ -71,7 +85,8 @@ export async function GET() {
           pushNotifications: false,
           dailyReminders: false,
           weeklyReminders: false,
-          streakReminders: false
+          streakReminders: false,
+          hasSeenPrompt: false
         },
         { status: 500 }
       );
@@ -85,7 +100,8 @@ export async function GET() {
         pushNotifications: false,
         dailyReminders: false,
         weeklyReminders: false,
-        streakReminders: false
+        streakReminders: false,
+        hasSeenPrompt: false
       },
       { status: 500 }
     );
@@ -113,44 +129,71 @@ export async function POST(request: Request) {
       pushNotifications: pushNotifications ?? false,
       dailyReminders: dailyReminders ?? false,
       weeklyReminders: weeklyReminders ?? false,
-      streakReminders: streakReminders ?? false
+      streakReminders: streakReminders ?? false,
     };
     
+    // If notifications are being enabled, mark the prompt as seen
+    if (optedIn && pushNotifications) {
+      updateData.hasSeenPrompt = true;
+    }
+    
     try {
-      // Use upsert to either create or update settings
-      const updatedSettings = await prisma.notificationSettings.upsert({
-        where: {
-          userId: session.user.id
-        },
-        create: {
-          userId: session.user.id,
-          ...updateData
-        },
-        update: updateData,
-        select: {
-          optedIn: true,
-          pushNotifications: true,
-          dailyReminders: true,
-          weeklyReminders: true,
-          streakReminders: true
-        }
-      });
+      // Check if user already has settings
+      const existingSettings = await prisma.$queryRaw`
+        SELECT id FROM "NotificationSettings" WHERE "userId" = ${session.user.id}
+      `;
+      
+      const settingsExist = Array.isArray(existingSettings) 
+        ? existingSettings.length > 0 
+        : existingSettings != null;
+      
+      if (settingsExist) {
+        // Update existing settings
+        await prisma.$executeRaw`
+          UPDATE "NotificationSettings"
+          SET 
+            "optedIn" = ${updateData.optedIn},
+            "pushNotifications" = ${updateData.pushNotifications},
+            "dailyReminders" = ${updateData.dailyReminders},
+            "weeklyReminders" = ${updateData.weeklyReminders},
+            "streakReminders" = ${updateData.streakReminders},
+            "hasSeenPrompt" = CASE 
+              WHEN ${optedIn && pushNotifications} THEN true 
+              ELSE "hasSeenPrompt" 
+            END,
+            "updatedAt" = NOW()
+          WHERE "userId" = ${session.user.id}
+        `;
+      } else {
+        // Create new settings
+        await prisma.$executeRaw`
+          INSERT INTO "NotificationSettings" 
+          ("id", "userId", "optedIn", "pushNotifications", "dailyReminders", "weeklyReminders", "streakReminders", "hasSeenPrompt", "createdAt", "updatedAt")
+          VALUES 
+          (gen_random_uuid(), ${session.user.id}, ${updateData.optedIn}, ${updateData.pushNotifications}, ${updateData.dailyReminders}, ${updateData.weeklyReminders}, ${updateData.streakReminders}, ${updateData.hasSeenPrompt ?? false}, NOW(), NOW())
+        `;
+      }
       
       return NextResponse.json({ 
         success: true,
-        ...updatedSettings
+        optedIn: updateData.optedIn,
+        pushNotifications: updateData.pushNotifications,
+        dailyReminders: updateData.dailyReminders,
+        weeklyReminders: updateData.weeklyReminders,
+        streakReminders: updateData.streakReminders,
+        hasSeenPrompt: updateData.hasSeenPrompt
       });
     } catch (dbError) {
       console.error('Database error updating notification settings:', dbError);
       return NextResponse.json(
-        { error: 'Database error updating notification settings' },
+        { error: 'Database error updating notification settings: ' + (dbError instanceof Error ? dbError.message : String(dbError)) },
         { status: 500 }
       );
     }
   } catch (error) {
     console.error('Error updating notification settings:', error);
     return NextResponse.json(
-      { error: 'Failed to update notification settings' },
+      { error: 'Failed to update notification settings: ' + (error instanceof Error ? error.message : String(error)) },
       { status: 500 }
     );
   }

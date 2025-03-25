@@ -154,16 +154,17 @@ model FriendRequest {
 }
 
 model NotificationSettings {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  optedIn             Boolean  @default(true)
-  dailyReminders      Boolean  @default(true)
-  weeklyReminders     Boolean  @default(true)
-  streakReminders     Boolean  @default(true)
-  pushNotifications   Boolean  @default(true)
-  fcmToken            String?
-  fcmTokenCreatedAt   DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  optedIn           Boolean   @default(true)
+  dailyReminders    Boolean   @default(true)
+  weeklyReminders   Boolean   @default(true)
+  streakReminders   Boolean   @default(true)
+  pushNotifications Boolean   @default(true)
+  hasSeenPrompt     Boolean   @default(false)
+  fcmToken          String?
+  fcmTokenCreatedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
