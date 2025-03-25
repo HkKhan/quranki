@@ -70,6 +70,8 @@ export default function DashboardPage() {
     dailyAverage: 0,
   });
   const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
 
   useEffect(() => {
     let mounted = true;
@@ -105,6 +107,61 @@ export default function DashboardPage() {
       mounted = false;
     };
   }, [session?.user?.id, status]);
+
+  useEffect(() => {
+    // Function to update visibility state
+    const handleVisibilityChange = () => {
+      const isPageVisible = document.visibilityState === 'visible';
+      setIsVisible(isPageVisible);
+      
+      // If becoming visible and it's been more than 10 seconds since last refresh
+      if (isPageVisible && Date.now() - lastRefreshTime > 10000) {
+        calculateAllReviewStats();
+        setLastRefreshTime(Date.now());
+      }
+    };
+
+    // Function to handle focus events
+    const handleFocus = () => {
+      setIsVisible(true);
+      // Refresh stats if it's been more than 10 seconds
+      if (Date.now() - lastRefreshTime > 10000) {
+        calculateAllReviewStats();
+        setLastRefreshTime(Date.now());
+      }
+    };
+
+    // Add event listeners for visibility and focus
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Start a timer for periodic refresh when page is visible
+    let refreshInterval: NodeJS.Timeout | null = null;
+    if (isVisible && session?.user?.id) {
+      refreshInterval = setInterval(() => {
+        calculateAllReviewStats();
+        setLastRefreshTime(Date.now());
+      }, 30000); // Refresh every 30 seconds when visible
+    }
+
+    // Cleanup event listeners and interval
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      if (refreshInterval) clearInterval(refreshInterval);
+    };
+  }, [isVisible, lastRefreshTime, session?.user?.id]);
+
+  // Add a separate effect to update stats when first loading the dashboard
+  useEffect(() => {
+    // This will refresh stats when the dashboard component mounts or becomes visible
+    if (session?.user?.id) {
+      calculateAllReviewStats();
+      setLastRefreshTime(Date.now());
+    }
+    
+    // We'll rely on the visibility change and focus events to refresh when returning to the dashboard
+  }, [session?.user?.id]);
 
   const loadDashboardData = async () => {
     try {
@@ -271,9 +328,27 @@ export default function DashboardPage() {
   const calculateAllReviewStats = async () => {
     try {
       const [srResponse, logsResponse, reviewStatsResponse] = await Promise.all([
-        fetch("/api/spaced-repetition"),
-        fetch("/api/daily-logs"),
-        fetch("/api/review-stats")
+        fetch("/api/spaced-repetition", {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }),
+        fetch("/api/daily-logs", {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }),
+        fetch("/api/review-stats", {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        })
       ]);
 
       if (!srResponse.ok || !logsResponse.ok || !reviewStatsResponse.ok) {
@@ -296,11 +371,15 @@ export default function DashboardPage() {
       let totalReviewed = 0;
       let dueToday = 0;
       
-      // Current date information
-      const now = Date.now();
-      const today = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD format
-      const startOfDay = new Date(now).setHours(0, 0, 0, 0);
-      const endOfDay = new Date(now).setHours(23, 59, 59, 999);
+      // Current date information - Fix timezone issue by using local date formatting
+      const now = new Date();
+      // Format today as YYYY-MM-DD in local timezone
+      const today = now.getFullYear() + '-' + 
+                    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(now.getDate()).padStart(2, '0');
+      
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
 
       // Calculate due ayahs for today using spaced repetition data
       if (srData.srData && Array.isArray(srData.srData)) {
@@ -314,18 +393,24 @@ export default function DashboardPage() {
         if (dueToday === 0) {
           dueToday = srData.srData.filter((item: any) => {
             const dueDate = new Date(item.dueDate).getTime();
-            return dueDate <= now;
+            return dueDate <= now.getTime();
           }).length;
         }
 
         // Record review dates for streak calculation
         srData.srData.forEach((item: any) => {
           if (item.lastReviewed) {
-            const reviewDate = new Date(item.lastReviewed).toISOString().split('T')[0];
-            reviewDays.add(reviewDate);
+            // Convert lastReviewed timestamp to local date string YYYY-MM-DD
+            const reviewDate = new Date(item.lastReviewed);
+            const localReviewDate = reviewDate.getFullYear() + '-' + 
+                                   String(reviewDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                                   String(reviewDate.getDate()).padStart(2, '0');
+            reviewDays.add(localReviewDate);
           }
         });
       }
+
+      console.log("Today's date (local):", today); // Debug log
 
       // Use review stats API data if available
       if (reviewStatsData.success && reviewStatsData.reviewStats) {
@@ -337,6 +422,10 @@ export default function DashboardPage() {
             totalReviewed += count as number;
           });
         }
+
+        // Debug log to see what dates are in the daily reviews
+        console.log("Daily reviews dates:", Object.keys(dailyReviews));
+        console.log("Looking for reviews on date:", today);
 
         // If we have due items from the review stats API, update dueToday
         if (reviewStatsData.reviewStats.dueItems && dueToday === 0) {
@@ -402,6 +491,9 @@ export default function DashboardPage() {
       const dailyAverage = daysWithActivity > 0 
         ? totalDailyReviews / daysWithActivity 
         : 0;
+
+      // Debug log for today's reviews
+      console.log("Reviews for today:", dailyReviews[today] || 0);
 
       // Update review stats
       setReviewStats({

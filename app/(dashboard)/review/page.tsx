@@ -515,67 +515,80 @@ function ReviewPageContent() {
       dueDate: Date.now() + nextInterval * 24 * 60 * 60 * 1000,
     };
 
-    // Save to database
+    // Fix: Ensure date uses local timezone instead of UTC
+    const now = new Date();
+    // Format today as YYYY-MM-DD in local timezone
+    const today = now.getFullYear() + '-' + 
+                  String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                  String(now.getDate()).padStart(2, '0');
+
+    // Prepare all the API calls to run in parallel
+    const apiCalls = [];
+
+    // Save to spaced repetition database
     try {
-      // Fix: Ensure date uses local timezone instead of UTC
-      const now = new Date();
-      const localDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
+      apiCalls.push(
+        fetch("/api/spaced-repetition", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            surahNo: updatedAyah.surah_no,
+            ayahNoSurah: updatedAyah.ayah_no_surah,
+            interval: updatedAyah.interval,
+            repetitions: updatedAyah.repetitions,
+            easeFactor: updatedAyah.easeFactor,
+            lastReviewed: updatedAyah.lastReviewed,
+            dueDate: updatedAyah.dueDate,
+            reviewDate: today,
+            selectionType: settings?.selectionType || "juzaa",
+          }),
+        })
       );
-      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-
-      const response = await fetch("/api/spaced-repetition", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          surahNo: updatedAyah.surah_no,
-          ayahNoSurah: updatedAyah.ayah_no_surah,
-          interval: updatedAyah.interval,
-          repetitions: updatedAyah.repetitions,
-          easeFactor: updatedAyah.easeFactor,
-          lastReviewed: updatedAyah.lastReviewed,
-          dueDate: updatedAyah.dueDate,
-          reviewDate: today,
-          selectionType: settings?.selectionType || "juzaa",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save spaced repetition data");
-      }
     } catch (error) {
-      // Silently handle error - we don't want to interrupt the user's review
-      // The data will be updated on their next review
+      console.error("Failed to save spaced repetition data:", error);
+      // Continue with the review process even if the API call fails
     }
 
     // Save daily log
     try {
-      // Fix: Ensure date uses local timezone instead of UTC
-      const now = new Date();
-      const localDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
+      apiCalls.push(
+        fetch("/api/daily-logs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            date: today,
+            ayahKey: `${updatedAyah.surah_no}:${updatedAyah.ayah_no_surah}`,
+          }),
+        })
       );
-      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-
-      await fetch("/api/daily-logs", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          date: today,
-          ayahKey: `${updatedAyah.surah_no}:${updatedAyah.ayah_no_surah}`,
-        }),
-      });
     } catch (error) {
-      // Silently handle error - daily logs are not critical
+      console.error("Failed to save daily log:", error);
+      // Continue with the review process even if the API call fails
     }
+
+    // Trigger a refresh of the review stats to keep them updated
+    // This ensures the dashboard will show the latest progress when the user returns
+    try {
+      apiCalls.push(
+        fetch("/api/review-stats", {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          },
+        })
+      );
+    } catch (error) {
+      console.error("Failed to refresh review stats:", error);
+      // Continue with the review process even if the API call fails
+    }
+
+    // Execute all API calls in parallel
+    await Promise.allSettled(apiCalls);
 
     // Update the review ayahs array with the updated ayah
     const updatedReviewAyahs = [...reviewAyahs];
