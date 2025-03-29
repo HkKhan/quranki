@@ -68,6 +68,7 @@ model QuranReviewSettings {
   selectedJuzaa     Int[]
   selectedSurahs    Int[]
   selectionType     String   @default("juzaa") // "juzaa" or "surah"
+  ayahsBefore       Int      @default(2)
   ayahsAfter        Int      @default(2)
   promptsPerSession Int      @default(20)
   createdAt         DateTime @default(now())

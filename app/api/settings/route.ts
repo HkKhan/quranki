@@ -31,7 +31,14 @@ export async function POST(request: Request) {
 
   try {
     const data = await request.json();
-    const { selectedJuzaa, selectedSurahs, selectionType, ayahsAfter, promptsPerSession } = data;
+    const {
+      selectedJuzaa,
+      selectedSurahs,
+      selectionType,
+      ayahsBefore,
+      ayahsAfter,
+      promptsPerSession,
+    } = data;
 
     const settings = await prisma.quranReviewSettings.upsert({
       where: { userId: session.user.id },
@@ -39,6 +46,7 @@ export async function POST(request: Request) {
         selectedJuzaa,
         selectedSurahs,
         selectionType,
+        ayahsBefore,
         ayahsAfter,
         promptsPerSession,
       },
@@ -47,6 +55,7 @@ export async function POST(request: Request) {
         selectedJuzaa,
         selectedSurahs,
         selectionType,
+        ayahsBefore,
         ayahsAfter,
         promptsPerSession,
       },
@@ -60,4 +69,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

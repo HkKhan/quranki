@@ -65,6 +65,7 @@ export default function ReviewPage() {
     selectedJuzaa: number[];
     selectedSurahs: number[];
     selectionType: "juzaa" | "surah";
+    ayahsBefore: number;
     ayahsAfter: number;
     promptsPerSession: number;
   } | null>(null);
@@ -73,7 +74,7 @@ export default function ReviewPage() {
   useEffect(() => {
     // Improved auth check to handle loading state
     if (status === "unauthenticated") {
-      router.push('/login');
+      router.push("/login");
     }
   }, [status, router]);
 
@@ -82,25 +83,25 @@ export default function ReviewPage() {
     if (status === "authenticated" && session?.user?.id) {
       const loadSettings = async () => {
         try {
-          console.log('Fetching user settings...');
-          const response = await fetch('/api/settings');
+          console.log("Fetching user settings...");
+          const response = await fetch("/api/settings");
           const data = await response.json();
-          console.log('Received settings:', data);
+          console.log("Received settings:", data);
 
           if (data.settings) {
-            console.log('Setting user settings:', data.settings);
+            console.log("Setting user settings:", data.settings);
             setSettings(data.settings);
             setIsSettingsLoading(false);
           } else {
-            console.log('No settings found');
-            setError('Please configure your review settings first');
-            setReviewStatus('error');
+            console.log("No settings found");
+            setError("Please configure your review settings first");
+            setReviewStatus("error");
             setIsSettingsLoading(false);
           }
         } catch (error) {
-          console.error('Error loading settings:', error);
-          setError('Failed to load settings');
-          setReviewStatus('error');
+          console.error("Error loading settings:", error);
+          setError("Failed to load settings");
+          setReviewStatus("error");
           setIsSettingsLoading(false);
         }
       };
@@ -112,14 +113,14 @@ export default function ReviewPage() {
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
     if (!isSettingsLoading && settings) {
-      console.log('Settings loaded, loading ayahs with:', settings);
+      console.log("Settings loaded, loading ayahs with:", settings);
       loadAyahs();
     }
   }, [isSettingsLoading, settings]);
 
   const loadAyahs = async () => {
     if (!settings) {
-      console.log('No settings available, cannot load ayahs');
+      console.log("No settings available, cannot load ayahs");
       return;
     }
 
@@ -127,22 +128,22 @@ export default function ReviewPage() {
     setReviewStatus("loading");
     try {
       let response;
-      
+
       // Use the configured promptsPerSession or default to 20 if not set
       const count = settings.promptsPerSession || 20;
-      
-      console.log('Loading ayahs with settings:', settings);
-      
+
+      console.log("Loading ayahs with settings:", settings);
+
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
           `/api/quran?action=review&juz=${juzParam}&count=${count}`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
       } else {
@@ -151,14 +152,14 @@ export default function ReviewPage() {
           `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
       }
-      
+
       const data = await response.json();
 
       if (!data.success || !data.ayahs || data.ayahs.length === 0) {
@@ -173,9 +174,11 @@ export default function ReviewPage() {
       const ayahsWithSR = await Promise.all(
         data.ayahs.map(async (ayah: QuranAyah) => {
           try {
-            const srResponse = await fetch(`/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`);
+            const srResponse = await fetch(
+              `/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`
+            );
             const srData = await srResponse.json();
-            
+
             if (srData.data) {
               return {
                 ...ayah,
@@ -214,29 +217,30 @@ export default function ReviewPage() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     if (!settings) {
-      console.log('No settings available, cannot load next ayahs');
+      console.log("No settings available, cannot load next ayahs");
       return;
     }
 
     try {
       // Only fetch previous ayahs if we're not at the start of a surah
       if (currentAyah.ayah_no_surah > 1) {
+        const prevCount = settings.ayahsBefore || 2;
         const prevResponse = await fetch(
-          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=2`,
+          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${prevCount}`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
         const prevData = await prevResponse.json();
-        
+
         if (prevData.success && prevData.ayahs) {
           // Only include previous ayahs from the same surah
-          const sameSurahPrevAyahs = prevData.ayahs.filter((ayah: QuranAyah) => 
-            ayah.surah_no === currentAyah.surah_no
+          const sameSurahPrevAyahs = prevData.ayahs.filter(
+            (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
           );
           setPrevAyahs(sameSurahPrevAyahs);
         } else {
@@ -246,54 +250,58 @@ export default function ReviewPage() {
         // At the start of a surah, don't show any previous context
         setPrevAyahs([]);
       }
-      
+
       // If ayahsAfter is 0, don't fetch any next ayahs
       if (settings.ayahsAfter === 0) {
         setNextAyahs([]);
         return;
       }
-      
+
       // First check if we need to respect surah boundaries
       const surahCountResponse = await fetch(
         `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`,
         {
           headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
         }
       );
       const surahCountData = await surahCountResponse.json();
-      
+
       if (surahCountData.success) {
         // Calculate how many ayahs are remaining in this surah
-        const ayahsRemainingInSurah = surahCountData.count - currentAyah.ayah_no_surah;
-        
+        const ayahsRemainingInSurah =
+          surahCountData.count - currentAyah.ayah_no_surah;
+
         // Use the minimum of ayahsAfter and ayahsRemainingInSurah
-        const adjustedCount = Math.min(settings.ayahsAfter, ayahsRemainingInSurah);
-        
+        const adjustedCount = Math.min(
+          settings.ayahsAfter,
+          ayahsRemainingInSurah
+        );
+
         if (adjustedCount <= 0) {
           setNextAyahs([]);
           return;
         }
-        
+
         const response = await fetch(
           `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`,
           {
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           }
         );
         const data = await response.json();
 
         if (data.success && data.ayahs) {
           // Only include next ayahs from the same surah
-          const sameSurahNextAyahs = data.ayahs.filter((ayah: QuranAyah) => 
-            ayah.surah_no === currentAyah.surah_no
+          const sameSurahNextAyahs = data.ayahs.filter(
+            (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
           );
           setNextAyahs(sameSurahNextAyahs);
         } else {
@@ -342,10 +350,14 @@ export default function ReviewPage() {
       } else if (nextRepetitions === 2) {
         nextInterval = 6;
       } else {
-        nextInterval = Math.round(currentAyah.interval * currentAyah.easeFactor);
+        nextInterval = Math.round(
+          currentAyah.interval * currentAyah.easeFactor
+        );
       }
 
-      nextEaseFactor = currentAyah.easeFactor + (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
+      nextEaseFactor =
+        currentAyah.easeFactor +
+        (0.1 - (3 - quality) * (0.08 + (3 - quality) * 0.02));
     }
 
     // Update the ayah with new spaced repetition values
@@ -362,9 +374,13 @@ export default function ReviewPage() {
     try {
       // Fix: Ensure date uses local timezone instead of UTC
       const now = new Date();
-      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const localDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
       const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-      
+
       const response = await fetch("/api/spaced-repetition", {
         method: "POST",
         headers: {
@@ -395,9 +411,13 @@ export default function ReviewPage() {
     try {
       // Fix: Ensure date uses local timezone instead of UTC
       const now = new Date();
-      const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const localDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
       const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-      
+
       await fetch("/api/daily-logs", {
         method: "POST",
         headers: {
@@ -439,7 +459,9 @@ export default function ReviewPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p>{isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}</p>
+        <p>
+          {isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}
+        </p>
       </div>
     );
   }
@@ -523,9 +545,14 @@ export default function ReviewPage() {
               <div className="bg-muted/50 p-6 rounded-lg">
                 {prevAyahs.length > 0 && (
                   <div className="mb-6">
-                    <p className="text-base text-muted-foreground text-center mb-3 font-bold">Context (Previous Ayahs)</p>
+                    <p className="text-base text-muted-foreground text-center mb-3 font-bold">
+                      Context (Previous Ayahs)
+                    </p>
                     {prevAyahs.map((ayah, index) => (
-                      <div key={index} className="mb-3 border-b pb-3 last:border-b-0 last:pb-0">
+                      <div
+                        key={index}
+                        className="mb-3 border-b pb-3 last:border-b-0 last:pb-0"
+                      >
                         <p className="font-arabic text-center text-sm mb-1">
                           {ayah.ayah_ar}
                         </p>
@@ -533,7 +560,8 @@ export default function ReviewPage() {
                           {ayah.ayah_en}
                         </p>
                         <p className="text-center text-xs text-muted-foreground mt-1 font-bold">
-                          {ayah.surah_no} - {ayah.surah_name_roman} {ayah.ayah_no_surah}
+                          {ayah.surah_no} - {ayah.surah_name_roman}{" "}
+                          {ayah.ayah_no_surah}
                         </p>
                       </div>
                     ))}
@@ -542,7 +570,8 @@ export default function ReviewPage() {
                 )}
                 <div className="mb-4 text-center">
                   <span className="text-sm font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
-                    {currentAyah.surah_no} - Surah {currentAyah.surah_name_roman}
+                    {currentAyah.surah_no} - Surah{" "}
+                    {currentAyah.surah_name_roman}
                     {" - "}
                     Ayah {currentAyah.ayah_no_surah}
                   </span>
@@ -556,8 +585,8 @@ export default function ReviewPage() {
               </div>
               <div className="text-center">
                 <p className="mb-2 font-medium">
-                  Continue reciting the next {settings?.ayahsAfter || 0} ayahs from
-                  memory
+                  Continue reciting the next {settings?.ayahsAfter || 0} ayahs
+                  from memory
                 </p>
                 <p className="text-sm text-muted-foreground mb-6">
                   When you're ready, click the button below to check your answer
@@ -587,7 +616,8 @@ export default function ReviewPage() {
                         {currentAyah.ayah_en}
                       </p>
                       <p className="text-center text-xs text-muted-foreground mt-2">
-                        {currentAyah.surah_no} - {currentAyah.surah_name_roman} {currentAyah.ayah_no_surah}
+                        {currentAyah.surah_no} - {currentAyah.surah_name_roman}{" "}
+                        {currentAyah.ayah_no_surah}
                       </p>
                     </div>
 
@@ -600,7 +630,8 @@ export default function ReviewPage() {
                           {ayah.ayah_en}
                         </p>
                         <p className="text-center text-xs text-muted-foreground mt-2">
-                          {ayah.surah_no} - {ayah.surah_name_roman} {ayah.ayah_no_surah}
+                          {ayah.surah_no} - {ayah.surah_name_roman}{" "}
+                          {ayah.ayah_no_surah}
                         </p>
                       </div>
                     ))}
