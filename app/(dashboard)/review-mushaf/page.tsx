@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1027,7 +1027,9 @@ function ReviewPageContent() {
   const renderMushafView = (
     ayah: QuranAyah,
     isCurrentAyah: boolean = false,
-    isNextAyah: boolean = false
+    isNextAyah: boolean = false,
+    isPreviousAyah: boolean = false,
+    shouldBeOccluded: boolean = false
   ) => {
     if (!pageData || !ayah.page_number || !ayah.position) {
       return <p className="font-arabic text-center mb-2">{ayah.ayah_ar}</p>;
@@ -1044,7 +1046,41 @@ function ReviewPageContent() {
     const imageUrl =
       pageData.imageUrl || `/img/${page.toString().padStart(3, "0")}.jpg`;
 
-    console.log("Rendering mushaf view with image URL:", imageUrl);
+    // For current ayah, we need to occlude all other ayahs on this page that come after it
+    let occlusionLayersForOtherAyahs: ReactNode[] = [];
+
+    if (isCurrentAyah && reviewStatus === "question" && pageData.ayahs) {
+      // Find all ayahs on this page that should be occluded (after current)
+      const currentSurah = ayah.surah_no;
+      const currentAyahNumber = ayah.ayah_no_surah;
+
+      // Filter ayahs that are from the same surah and have ayah numbers greater than current
+      const ayahsToOcclude = pageData.ayahs.filter(
+        (item: any) =>
+          (item.sura_id === currentSurah && item.aya_id > currentAyahNumber) ||
+          item.sura_id > currentSurah // Also occlude ayahs from later surahs
+      );
+
+      // Create occlusion layers for these ayahs
+      ayahsToOcclude.forEach((ayahToOcclude: any, index: number) => {
+        const segsToOcclude = ayahToOcclude.segs || [];
+
+        segsToOcclude.forEach((seg: any, i: number) => {
+          occlusionLayersForOtherAyahs.push(
+            <div
+              key={`occluded-other-${index}-${i}`}
+              className="absolute bg-gray-500/80"
+              style={{
+                left: `${(seg.x / pageWidth) * 100}%`,
+                top: `${(seg.y / pageHeight) * 100}%`,
+                width: `${(seg.w / pageWidth) * 100}%`,
+                height: `${(seg.h / pageHeight) * 100}%`,
+              }}
+            />
+          );
+        });
+      });
+    }
 
     return (
       <div className="relative w-full max-w-md mx-auto mb-4">
@@ -1073,12 +1109,15 @@ function ReviewPageContent() {
               />
             ))}
 
-          {/* Occlude next ayahs if in question view */}
+          {/* Occlude ayahs based on our rules */}
           {reviewStatus === "question" &&
-            isNextAyah &&
+            // Occlude if:
+            // 1. This is a next ayah (after the current ayah)
+            // 2. This is a previous ayah that should be occluded based on ayahsBefore setting
+            (isNextAyah || shouldBeOccluded) &&
             segs.map((seg, i) => (
               <div
-                key={`next-${i}`}
+                key={`occluded-${i}`}
                 className="absolute bg-gray-500/80"
                 style={{
                   left: `${(seg.x / pageWidth) * 100}%`,
@@ -1088,6 +1127,9 @@ function ReviewPageContent() {
                 }}
               />
             ))}
+
+          {/* Add occlusion layers for other ayahs on the page (that come after current) */}
+          {occlusionLayersForOtherAyahs}
         </div>
         <p className="text-center text-xs text-muted-foreground mt-2">
           Surah {ayah.surah_name_roman} ({ayah.surah_no}), Ayah{" "}
@@ -1265,27 +1307,51 @@ function ReviewPageContent() {
                     <p className="text-base text-muted-foreground text-center mb-3 font-bold">
                       Context (Previous Ayahs)
                     </p>
-                    {prevAyahs.map((ayah, index) => (
-                      <div
-                        key={index}
-                        className="mb-3 border-b pb-3 last:border-b-0 last:pb-0"
-                      >
-                        {mushafMode ? (
-                          renderMushafView(ayah)
-                        ) : (
-                          <p className="font-arabic text-center text-sm mb-1">
-                            {ayah.ayah_ar}
+                    {prevAyahs.map((ayah, index) => {
+                      // Calculate if this previous ayah should be occluded
+                      // If settings.ayahsBefore is 2, we show the 2 ayahs right before the current ayah
+                      const ayahsBeforeCount = settings?.ayahsBefore || 2;
+                      const shouldOcclude =
+                        index < prevAyahs.length - ayahsBeforeCount;
+
+                      return (
+                        <div
+                          key={index}
+                          className="mb-3 border-b pb-3 last:border-b-0 last:pb-0"
+                        >
+                          {mushafMode ? (
+                            renderMushafView(
+                              ayah,
+                              false, // not current ayah
+                              false, // not next ayah
+                              true, // is previous ayah
+                              shouldOcclude // should be occluded if too far back
+                            )
+                          ) : (
+                            <>
+                              {shouldOcclude ? (
+                                <p className="font-arabic text-center text-sm mb-1 text-muted-foreground">
+                                  [Ayah occluded - Review from memory]
+                                </p>
+                              ) : (
+                                <p className="font-arabic text-center text-sm mb-1">
+                                  {ayah.ayah_ar}
+                                </p>
+                              )}
+                            </>
+                          )}
+                          <p className="text-center text-xs text-muted-foreground">
+                            {shouldOcclude
+                              ? "[Translation occluded]"
+                              : ayah.ayah_en}
                           </p>
-                        )}
-                        <p className="text-center text-xs text-muted-foreground">
-                          {ayah.ayah_en}
-                        </p>
-                        <p className="text-center text-xs text-muted-foreground mt-1 font-bold">
-                          {ayah.surah_no} - {ayah.surah_name_roman}{" "}
-                          {ayah.ayah_no_surah}
-                        </p>
-                      </div>
-                    ))}
+                          <p className="text-center text-xs text-muted-foreground mt-1 font-bold">
+                            {ayah.surah_no} - {ayah.surah_name_roman}{" "}
+                            {ayah.ayah_no_surah}
+                          </p>
+                        </div>
+                      );
+                    })}
                     <div className="border-t my-4"></div>
                   </div>
                 )}
@@ -1300,7 +1366,7 @@ function ReviewPageContent() {
 
                 {mushafMode ? (
                   // Render the mushaf view for current ayah
-                  renderMushafView(currentAyah, true)
+                  renderMushafView(currentAyah, true, false, false, false)
                 ) : (
                   // Render the text view
                   <p className="font-arabic text-center mb-4">
@@ -1343,7 +1409,7 @@ function ReviewPageContent() {
 
                       {mushafMode ? (
                         // Render the mushaf view for the current ayah
-                        renderMushafView(currentAyah, true)
+                        renderMushafView(currentAyah, true, false, false, false)
                       ) : (
                         // Render the text view
                         <p className="font-arabic text-center mb-2">
@@ -1363,8 +1429,8 @@ function ReviewPageContent() {
                     {nextAyahs.map((ayah, index) => (
                       <div key={index} className="bg-background p-4 rounded-md">
                         {mushafMode ? (
-                          // Render the mushaf view for next ayahs
-                          renderMushafView(ayah, false, false)
+                          // Render the mushaf view for next ayahs - no occlusion in answer view
+                          renderMushafView(ayah, false, true, false, false)
                         ) : (
                           // Render the text view
                           <p className="font-arabic text-center mb-2">
