@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { BookOpen, Menu, Moon, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,24 +18,124 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Image from "next/image";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
 
 export function MainNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const isLoading = status === "loading";
+  const [hasSettings, setHasSettings] = useState<boolean | null>(null);
+  const isAuthenticated = status === "authenticated";
+  const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
+  
+  // Add state to store user display name
+  const [userDisplayName, setUserDisplayName] = useState<string>('');
 
   // After hydration, we can safely show the UI that depends on the theme
   React.useEffect(() => {
     setMounted(true);
   }, []);
+  
+  // Update display name from session
+  useEffect(() => {
+    if (session?.user) {
+      setUserDisplayName(session.user.name || session.user.email || '');
+    }
+  }, [session?.user]);
+  
+  // Listen for name change events
+  useEffect(() => {
+    const handleNameChange = (event: any) => {
+      const { name } = event.detail;
+      setUserDisplayName(name);
+    };
+    
+    window.addEventListener('user:nameChanged', handleNameChange);
+    
+    return () => {
+      window.removeEventListener('user:nameChanged', handleNameChange);
+    };
+  }, []);
+
+  // Check if the user has configured settings
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      const checkUserSettings = async () => {
+        try {
+          const response = await fetch("/api/settings");
+          const data = await response.json();
+          setHasSettings(!!data.settings);
+        } catch (error) {
+          setHasSettings(false);
+        }
+      };
+
+      checkUserSettings();
+    } else if (status === "unauthenticated") {
+      setHasSettings(null); // Reset for non-logged in users
+    }
+  }, [status, session?.user?.id, pathname]);
+  
+  // Fetch pending friend requests count
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.id) {
+      const fetchPendingRequests = async () => {
+        try {
+          const response = await fetch("/api/friends/pending-count");
+          if (response.ok) {
+            const data = await response.json();
+            setPendingFriendRequests(data.count || 0);
+          }
+        } catch (error) {
+          console.error("Error fetching pending friend requests:", error);
+        }
+      };
+      
+      // Fetch immediately when component mounts
+      fetchPendingRequests();
+      
+      // Set up polling every 30 seconds
+      const intervalId = setInterval(fetchPendingRequests, 30000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [status, session?.user?.id]);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  const routes = [
+  const handleNavigation = (href: string, e: React.MouseEvent) => {
+    // We won't block navigation to the review page anymore
+    // The review page itself will handle showing appropriate error messages
+    // This removes the alert() popup and allows for a better user experience
+    
+    // Just refresh the settings check when navigation happens
+    if (status === "authenticated" && session?.user?.id) {
+      fetch("/api/settings")
+        .then(response => response.json())
+        .then(data => {
+          setHasSettings(!!data.settings);
+        })
+        .catch(error => {
+          setHasSettings(false);
+        });
+    }
+  };
+
+  // Full routes for authenticated users
+  interface NavRoute {
+    href: string;
+    label: string;
+    active: boolean;
+    notification?: number | null;
+  }
+  
+  const authenticatedRoutes: NavRoute[] = [
     {
       href: "/dashboard",
       label: "Dashboard",
@@ -45,6 +145,12 @@ export function MainNav() {
       href: "/review",
       label: "Review",
       active: pathname === "/review",
+    },
+    {
+      href: "/friends",
+      label: "Friends",
+      active: pathname === "/friends",
+      notification: pendingFriendRequests > 0 ? pendingFriendRequests : null
     },
     {
       href: "/leaderboard",
@@ -63,37 +169,113 @@ export function MainNav() {
     },
   ];
 
+  // Limited routes for unauthenticated users
+  const unauthenticatedRoutes: NavRoute[] = [
+    {
+      href: "/leaderboard",
+      label: "Leaderboard",
+      active: pathname === "/leaderboard",
+    },
+  ];
+
+  // Choose routes based on authentication status
+  const routes = isAuthenticated ? authenticatedRoutes : unauthenticatedRoutes;
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
-        <div className="md:hidden mr-2">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="mr-2">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-[240px] sm:w-[240px]">
-              <nav className="flex flex-col space-y-4 mt-8">
-                {routes.map((route) => (
+        {/* Mobile Menu Hamburger - Only for authenticated users */}
+        {isAuthenticated ? (
+          <div className="md:hidden mr-2">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="mr-2">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[240px] sm:w-[240px]">
+                <nav className="flex flex-col space-y-4 mt-8">
+                  {authenticatedRoutes.map((route) => (
+                    <Link
+                      key={route.href}
+                      href={route.href}
+                      onClick={(e) => handleNavigation(route.href, e)}
+                      className={cn(
+                        "text-sm font-medium py-2 transition-colors hover:text-primary relative",
+                        route.active
+                          ? "border-l-2 border-primary pl-3 text-foreground"
+                          : "text-foreground pl-4",
+                        route.href === "/review" &&
+                          status === "authenticated" &&
+                          hasSettings === false
+                          ? "text-muted-foreground hover:text-primary/70"
+                          : ""
+                      )}
+                    >
+                      {route.label}
+                      {route.notification && (
+                        <Badge variant="destructive" className="ml-2 absolute right-2">
+                          {route.notification}
+                        </Badge>
+                      )}
+                    </Link>
+                  ))}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
+        ) : (
+          <div className="md:hidden mr-2">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="mr-2">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[240px] sm:w-[240px]">
+                <nav className="flex flex-col space-y-4 mt-8">
                   <Link
-                    key={route.href}
-                    href={route.href}
+                    href="/leaderboard"
                     className={cn(
                       "text-sm font-medium py-2 transition-colors hover:text-primary",
-                      route.active
+                      pathname === "/leaderboard"
                         ? "border-l-2 border-primary pl-3 text-foreground"
                         : "text-foreground pl-4"
                     )}
                   >
-                    {route.label}
+                    Leaderboard
                   </Link>
-                ))}
-              </nav>
-            </SheetContent>
-          </Sheet>
-        </div>
+                  <Link
+                    href="/register"
+                    className={cn(
+                      "text-sm font-medium py-2 transition-colors hover:text-primary",
+                      pathname === "/register"
+                        ? "border-l-2 border-primary pl-3 text-foreground"
+                        : "text-foreground pl-4"
+                    )}
+                  >
+                    Sign up
+                  </Link>
+                  <Link
+                    href="/login"
+                    className={cn(
+                      "text-sm font-medium py-2 transition-colors hover:text-primary",
+                      pathname === "/login"
+                        ? "border-l-2 border-primary pl-3 text-foreground"
+                        : "text-foreground pl-4"
+                    )}
+                  >
+                    Sign in
+                  </Link>
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
+        )}
+        
+        {/* Logo */}
         <div className="flex items-center mr-4">
           <Link href="/" className="flex items-center">
             <div
@@ -122,27 +304,44 @@ export function MainNav() {
             </div>
           </Link>
         </div>
+        
         <div className="flex-1"></div>
+        
+        {/* Desktop Navigation Menu */}
         <nav className="hidden md:flex items-center space-x-6 pr-6">
           {routes.map((route) => (
-            <Link
-              key={route.href}
-              href={route.href}
-              className={cn(
-                "text-sm font-medium transition-colors hover:text-primary",
-                route.active
-                  ? "border-b-2 border-primary pb-2 text-foreground"
-                  : "text-foreground"
+            <div key={route.href} className="relative">
+              <Link
+                href={route.href}
+                onClick={(e) => handleNavigation(route.href, e)}
+                className={cn(
+                  "text-sm font-medium transition-colors hover:text-primary",
+                  route.active
+                    ? "border-b-2 border-primary pb-2 text-foreground"
+                    : "text-foreground",
+                  route.href === "/review" &&
+                    status === "authenticated" &&
+                    hasSettings === false
+                    ? "text-muted-foreground hover:text-primary/70"
+                    : ""
+                )}
+              >
+                {route.label}
+              </Link>
+              {route.notification && (
+                <Badge variant="destructive" className="absolute -top-2 -right-2 text-xs min-w-5 h-5 flex items-center justify-center">
+                  {route.notification}
+                </Badge>
               )}
-            >
-              {route.label}
-            </Link>
+            </div>
           ))}
         </nav>
+        
+        {/* Right side actions */}
         <div className="flex items-center space-x-2">
           {isLoading ? (
             <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
-          ) : session?.user ? (
+          ) : isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -152,9 +351,12 @@ export function MainNav() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>
-                  {session.user.name || session.user.email}
+                  {userDisplayName || session?.user?.name || session?.user?.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/profile">Profile</Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
                     signOut({ callbackUrl: "https://quranki.com" })
@@ -165,13 +367,23 @@ export function MainNav() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link
-              href="/login"
-              className="text-sm font-medium transition-colors hover:text-primary text-foreground"
-            >
-              Sign in
-            </Link>
+            <>
+              <Link
+                href="/register"
+                className="text-sm font-medium transition-colors hover:text-primary text-foreground mr-2"
+              >
+                Sign up
+              </Link>
+              <Link
+                href="/login"
+                className="text-sm font-medium transition-colors hover:text-primary text-foreground"
+              >
+                Sign in
+              </Link>
+            </>
           )}
+          
+          {/* Theme Toggle Button */}
           <Button
             variant="ghost"
             size="sm"

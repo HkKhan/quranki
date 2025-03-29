@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface QuranAyah {
   surah_no: number;
@@ -47,9 +48,22 @@ interface QuranAyah {
 
 type ReviewStatus = "loading" | "question" | "answer" | "complete" | "error";
 
-export default function ReviewPage() {
+// Create a loading component for Suspense
+function ReviewPageLoading() {
+  return (
+    <div className="flex flex-col items-center justify-center h-screen">
+      <Loader2 className="w-12 h-12 animate-spin text-primary" />
+      <p className="mt-4 text-lg">Loading review...</p>
+    </div>
+  );
+}
+
+// Main review component that uses searchParams
+function ReviewPageContent() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
+  const isGuestMode = searchParams.get("guest") === "true";
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [ayahs, setAyahs] = useState<any[]>([]);
@@ -70,31 +84,73 @@ export default function ReviewPage() {
     promptsPerSession: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // New state to track if we've tried loading settings
+  const [settingsAttempted, setSettingsAttempted] = useState(false);
+
+  // Get parameters from search params
+  const juzParam = searchParams.get("juz")
+    ? Number(searchParams.get("juz"))
+    : 30;
+  const ayahsAfterParam = searchParams.get("ayahsAfter")
+    ? Number(searchParams.get("ayahsAfter"))
+    : 2;
 
   useEffect(() => {
-    // Improved auth check to handle loading state
-    if (status === "unauthenticated") {
+    // Skip auth check for guest mode
+    if (!isGuestMode && status === "unauthenticated") {
       router.push("/login");
     }
-  }, [status, router]);
+  }, [status, router, isGuestMode]);
 
-  // Only load settings when we're authenticated
+  // Only load settings when we're authenticated or in guest mode
   useEffect(() => {
-    if (status === "authenticated" && session?.user?.id) {
+    if ((status === "authenticated" && session?.user?.id) || isGuestMode) {
       const loadSettings = async () => {
         try {
-          console.log("Fetching user settings...");
-          const response = await fetch("/api/settings");
-          const data = await response.json();
-          console.log("Received settings:", data);
+          // Only use guest mode settings if user is not authenticated
+          if (isGuestMode && status !== "authenticated") {
+            setSettings({
+              selectedJuzaa: [juzParam],
+              selectedSurahs: [],
+              selectionType: "juzaa",
+              ayahsBefore: 2,
+              ayahsAfter: ayahsAfterParam,
+              promptsPerSession: 20,
+            });
+            setIsSettingsLoading(false);
+            return;
+          }
 
-          if (data.settings) {
-            console.log("Setting user settings:", data.settings);
+          // For authenticated users, always load their settings
+          const response = await fetch("/api/settings", {
+            // Add cache control to prevent caching settings
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to load settings");
+          }
+
+          const data = await response.json();
+
+          if (
+            data.settings &&
+            ((data.settings.selectionType === "juzaa" &&
+              data.settings.selectedJuzaa?.length > 0) ||
+              (data.settings.selectionType === "surah" &&
+                data.settings.selectedSurahs?.length > 0))
+          ) {
             setSettings(data.settings);
             setIsSettingsLoading(false);
           } else {
-            console.log("No settings found");
-            setError("Please configure your review settings first");
+            console.warn("No settings found");
+            setError(
+              "Please configure your review settings to start reviewing"
+            );
             setReviewStatus("error");
             setIsSettingsLoading(false);
           }
@@ -103,24 +159,44 @@ export default function ReviewPage() {
           setError("Failed to load settings");
           setReviewStatus("error");
           setIsSettingsLoading(false);
+        } finally {
+          setSettingsAttempted(true);
         }
       };
 
       loadSettings();
     }
-  }, [session?.user?.id, status]);
+  }, [session?.user?.id, status, isGuestMode, juzParam, ayahsAfterParam]);
 
   // Separate effect for loading ayahs when settings are available
   useEffect(() => {
     if (!isSettingsLoading && settings) {
-      console.log("Settings loaded, loading ayahs with:", settings);
       loadAyahs();
     }
   }, [isSettingsLoading, settings]);
 
+  // Add a timeout to prevent infinite loading for users without settings
+  useEffect(() => {
+    if (
+      (isSettingsLoading || isLoading) &&
+      status === "authenticated" &&
+      !isGuestMode
+    ) {
+      const timer = setTimeout(() => {
+        if (isSettingsLoading) {
+          setError("Please configure your review settings to start reviewing");
+          setReviewStatus("error");
+          setIsSettingsLoading(false);
+        }
+      }, 3000); // Show error after 3 seconds if still loading
+
+      return () => clearTimeout(timer);
+    }
+  }, [isSettingsLoading, isLoading, status, isGuestMode]);
+
   const loadAyahs = async () => {
     if (!settings) {
-      console.log("No settings available, cannot load ayahs");
+      console.warn("No settings available, cannot load ayahs");
       return;
     }
 
@@ -132,12 +208,12 @@ export default function ReviewPage() {
       // Use the configured promptsPerSession or default to 20 if not set
       const count = settings.promptsPerSession || 20;
 
-      console.log("Loading ayahs with settings:", settings);
-
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
         response = await fetch(
-          `/api/quran?action=review&juz=${juzParam}&count=${count}`,
+          `/api/quran?action=review&juz=${juzParam}&count=${count}${
+            isGuestMode ? "&guest=true" : ""
+          }`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -149,7 +225,9 @@ export default function ReviewPage() {
       } else {
         const surahParam = settings.selectedSurahs.join(",");
         response = await fetch(
-          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}`,
+          `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}${
+            isGuestMode ? "&guest=true" : ""
+          }`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -170,9 +248,63 @@ export default function ReviewPage() {
         return;
       }
 
+      // Get information about last ayahs in each surah
+      // We'll use a simple fetch to get surah details
+      let surahDetails: Record<number, { totalAyahs: number }> = {};
+
+      try {
+        // Make a single API call to get all surah info if needed
+        const surahInfoResponse = await fetch("/api/quran?action=surahDetails");
+        const surahInfoData = await surahInfoResponse.json();
+
+        if (surahInfoData.success && surahInfoData.surahs) {
+          // Create a lookup object with surah number as key
+          surahInfoData.surahs.forEach((surah: any) => {
+            surahDetails[surah.surah_no] = {
+              totalAyahs: surah.total_ayahs,
+            };
+          });
+        }
+      } catch (error) {
+        console.error("Could not fetch surah details:", error);
+        // Continue without this feature if fetch fails
+      }
+
+      // Filter out ayahs that are the last in their surah
+      let filteredAyahs = [...data.ayahs];
+
+      if (Object.keys(surahDetails).length > 0) {
+        filteredAyahs = filteredAyahs.filter((ayah: QuranAyah) => {
+          const surahInfo = surahDetails[ayah.surah_no];
+          // If we have surah info, filter out last ayah of each surah
+          if (surahInfo) {
+            return ayah.ayah_no_surah < surahInfo.totalAyahs;
+          }
+          return true; // If we don't have surah info, include all ayahs
+        });
+      }
+
+      // Ensure we have at least some ayahs left after filtering
+      if (filteredAyahs.length === 0 && data.ayahs.length > 0) {
+        console.warn("All ayahs were filtered out, using original set");
+        filteredAyahs = data.ayahs;
+      }
+
       // Load all data before updating state
       const ayahsWithSR = await Promise.all(
-        data.ayahs.map(async (ayah: QuranAyah) => {
+        filteredAyahs.map(async (ayah: QuranAyah) => {
+          // Skip fetching spaced repetition data for guest mode
+          if (isGuestMode) {
+            return {
+              ...ayah,
+              interval: 1,
+              repetitions: 0,
+              easeFactor: 2.5,
+              lastReviewed: null,
+              dueDate: null,
+            };
+          }
+
           try {
             const srResponse = await fetch(
               `/api/spaced-repetition?surahNo=${ayah.surah_no}&ayahNoSurah=${ayah.ayah_no_surah}`
@@ -208,7 +340,8 @@ export default function ReviewPage() {
       setReviewedCount(0);
       setReviewStatus("question");
     } catch (error) {
-      setError("Failed to load Quran data. Please try again later.");
+      console.error("Error loading ayahs:", error);
+      setError("Failed to load Quran data");
       setReviewStatus("error");
     } finally {
       setIsLoading(false);
@@ -217,7 +350,7 @@ export default function ReviewPage() {
 
   const loadNextAyahs = async (currentAyah: QuranAyah) => {
     if (!settings) {
-      console.log("No settings available, cannot load next ayahs");
+      console.warn("No settings available, cannot load next ayahs");
       return;
     }
 
@@ -226,7 +359,9 @@ export default function ReviewPage() {
       if (currentAyah.ayah_no_surah > 1) {
         const prevCount = settings.ayahsBefore || 2;
         const prevResponse = await fetch(
-          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${prevCount}`,
+          `/api/quran?action=prev&surah=${currentAyah.surah_no}&ayah=${
+            currentAyah.ayah_no_surah
+          }&count=${prevCount}${isGuestMode ? "&guest=true" : ""}`,
           {
             headers: {
               "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -257,9 +392,49 @@ export default function ReviewPage() {
         return;
       }
 
-      // First check if we need to respect surah boundaries
-      const surahCountResponse = await fetch(
-        `/api/quran?action=surahAyahCount&surah=${currentAyah.surah_no}`,
+      // Get information about current surah to avoid spanning across surahs
+      let surahInfo: { totalAyahs: number } | null = null;
+      try {
+        const surahInfoResponse = await fetch(
+          `/api/quran?action=surahInfo&surah=${currentAyah.surah_no}`
+        );
+        const surahInfoData = await surahInfoResponse.json();
+
+        if (surahInfoData.success && surahInfoData.surah) {
+          surahInfo = {
+            totalAyahs: surahInfoData.surah.total_ayahs,
+          };
+        }
+      } catch (error) {
+        console.error("Could not fetch surah info:", error);
+        // Continue without this information if fetch fails
+      }
+
+      // Calculate how many ayahs we need to request based on position in surah
+      let requestCount = settings.ayahsAfter;
+
+      // If we're close to the end of a surah, adjust count to avoid spanning
+      if (
+        surahInfo &&
+        currentAyah.ayah_no_surah + settings.ayahsAfter >= surahInfo.totalAyahs
+      ) {
+        // Only get ayahs up to the second-to-last ayah in the surah
+        requestCount = Math.max(
+          0,
+          surahInfo.totalAyahs - currentAyah.ayah_no_surah - 1
+        );
+
+        if (requestCount <= 0) {
+          // If we're already at or near the end of the surah, don't fetch any next ayahs
+          setNextAyahs([]);
+          return;
+        }
+      }
+
+      const nextResponse = await fetch(
+        `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${
+          currentAyah.ayah_no_surah
+        }&count=${requestCount}${isGuestMode ? "&guest=true" : ""}`,
         {
           headers: {
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -268,50 +443,19 @@ export default function ReviewPage() {
           },
         }
       );
-      const surahCountData = await surahCountResponse.json();
+      const nextData = await nextResponse.json();
 
-      if (surahCountData.success) {
-        // Calculate how many ayahs are remaining in this surah
-        const ayahsRemainingInSurah =
-          surahCountData.count - currentAyah.ayah_no_surah;
-
-        // Use the minimum of ayahsAfter and ayahsRemainingInSurah
-        const adjustedCount = Math.min(
-          settings.ayahsAfter,
-          ayahsRemainingInSurah
+      if (nextData.success && nextData.ayahs) {
+        // Filter to ensure we only get ayahs from the same surah
+        const sameSurahNextAyahs = nextData.ayahs.filter(
+          (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
         );
-
-        if (adjustedCount <= 0) {
-          setNextAyahs([]);
-          return;
-        }
-
-        const response = await fetch(
-          `/api/quran?action=next&surah=${currentAyah.surah_no}&ayah=${currentAyah.ayah_no_surah}&count=${adjustedCount}`,
-          {
-            headers: {
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          }
-        );
-        const data = await response.json();
-
-        if (data.success && data.ayahs) {
-          // Only include next ayahs from the same surah
-          const sameSurahNextAyahs = data.ayahs.filter(
-            (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
-          );
-          setNextAyahs(sameSurahNextAyahs);
-        } else {
-          setNextAyahs([]);
-        }
+        setNextAyahs(sameSurahNextAyahs);
       } else {
         setNextAyahs([]);
       }
     } catch (error) {
-      console.error("Error loading ayahs:", error);
+      console.error("Error loading context ayahs:", error);
       setPrevAyahs([]);
       setNextAyahs([]);
     }
@@ -322,6 +466,23 @@ export default function ReviewPage() {
   };
 
   const handleRating = async (remembered: boolean) => {
+    // Skip spaced repetition updates for guest mode - only if not authenticated
+    if (isGuestMode && status !== "authenticated") {
+      // Just advance to the next question
+      setReviewedCount(reviewedCount + 1);
+
+      if (currentAyahIndex + 1 < reviewAyahs.length) {
+        await loadNextAyahs(reviewAyahs[currentAyahIndex + 1]);
+        setCurrentAyahIndex(currentAyahIndex + 1);
+        setShowArabic(false);
+        setShowTranslation(false);
+        setReviewStatus("question");
+      } else {
+        setReviewStatus("complete");
+      }
+      return;
+    }
+
     const currentAyah = reviewAyahs[currentAyahIndex];
 
     // Initialize spaced repetition values if they don't exist
@@ -370,81 +531,98 @@ export default function ReviewPage() {
       dueDate: Date.now() + nextInterval * 24 * 60 * 60 * 1000,
     };
 
-    // Save to database
+    // Fix: Ensure date uses local timezone instead of UTC
+    const now = new Date();
+    // Format today as YYYY-MM-DD in local timezone
+    const today =
+      now.getFullYear() +
+      "-" +
+      String(now.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(now.getDate()).padStart(2, "0");
+
+    // Prepare all the API calls to run in parallel
+    const apiCalls = [];
+
+    // Save to spaced repetition database
     try {
-      // Fix: Ensure date uses local timezone instead of UTC
-      const now = new Date();
-      const localDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
+      apiCalls.push(
+        fetch("/api/spaced-repetition", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            surahNo: updatedAyah.surah_no,
+            ayahNoSurah: updatedAyah.ayah_no_surah,
+            interval: updatedAyah.interval,
+            repetitions: updatedAyah.repetitions,
+            easeFactor: updatedAyah.easeFactor,
+            lastReviewed: updatedAyah.lastReviewed,
+            dueDate: updatedAyah.dueDate,
+            reviewDate: today,
+            selectionType: settings?.selectionType || "juzaa",
+          }),
+        })
       );
-      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-
-      const response = await fetch("/api/spaced-repetition", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          surahNo: updatedAyah.surah_no,
-          ayahNoSurah: updatedAyah.ayah_no_surah,
-          interval: updatedAyah.interval,
-          repetitions: updatedAyah.repetitions,
-          easeFactor: updatedAyah.easeFactor,
-          lastReviewed: updatedAyah.lastReviewed,
-          dueDate: updatedAyah.dueDate,
-          reviewDate: today,
-          selectionType: settings?.selectionType || "juzaa",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save spaced repetition data");
-      }
     } catch (error) {
+      console.error("Failed to save spaced repetition data:", error);
       // Silently handle error - we don't want to interrupt the user's review
       // The data will be updated on their next review
     }
 
     // Save daily log
     try {
-      // Fix: Ensure date uses local timezone instead of UTC
-      const now = new Date();
-      const localDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
+      apiCalls.push(
+        fetch("/api/daily-logs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            date: today,
+            ayahKey: `${updatedAyah.surah_no}:${updatedAyah.ayah_no_surah}`,
+          }),
+        })
       );
-      const today = localDate.toISOString().split("T")[0]; // YYYY-MM-DD format in local timezone
-
-      await fetch("/api/daily-logs", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          date: today,
-          ayahKey: `${updatedAyah.surah_no}:${updatedAyah.ayah_no_surah}`,
-        }),
-      });
     } catch (error) {
+      console.error("Failed to save daily log:", error);
       // Silently handle error - daily logs are not critical
     }
 
-    // Update the review ayahs array with the updated ayah
-    const updatedReviewAyahs = [...reviewAyahs];
-    updatedReviewAyahs[currentAyahIndex] = updatedAyah;
-    setReviewAyahs(updatedReviewAyahs);
+    // This ensures the dashboard will show the latest progress when the user returns
+    try {
+      apiCalls.push(
+        fetch("/api/review-stats", {
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        })
+      );
+    } catch (error) {
+      console.error("Failed to refresh review stats:", error);
+      // Continue with the review process even if the API call fails
+    }
 
-    // Move to the next ayah or complete the review
-    if (currentAyahIndex < reviewAyahs.length - 1) {
-      const nextIndex = currentAyahIndex + 1;
-      await loadNextAyahs(reviewAyahs[nextIndex]);
-      setCurrentAyahIndex(nextIndex);
-      setReviewedCount(reviewedCount + 1);
+    // Execute all API calls in parallel
+    await Promise.allSettled(apiCalls);
+
+    // Update the review ayahs array with the updated ayah
+    const updatedAyahs = [...reviewAyahs];
+    updatedAyahs[currentAyahIndex] = updatedAyah;
+    setReviewAyahs(updatedAyahs);
+
+    // Increase reviewed count
+    setReviewedCount(reviewedCount + 1);
+
+    // Advance to the next ayah
+    if (currentAyahIndex + 1 < reviewAyahs.length) {
+      await loadNextAyahs(reviewAyahs[currentAyahIndex + 1]);
+      setCurrentAyahIndex(currentAyahIndex + 1);
+      setShowArabic(false); // Reset for next question
       setShowTranslation(false);
-      setShowArabic(false);
       setReviewStatus("question");
     } else {
       setReviewStatus("complete");
@@ -455,40 +633,44 @@ export default function ReviewPage() {
     loadAyahs();
   };
 
-  if (isSettingsLoading || isLoading) {
+  if (reviewStatus === "error") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p>
-          {isSettingsLoading ? "Loading settings..." : "Loading Quran data..."}
-        </p>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <AlertCircle className="h-12 w-12 text-destructive" />
+        <h2 className="text-xl font-semibold">Error</h2>
+        <p className="text-muted-foreground text-center max-w-md">{error}</p>
+        {(!settings || !settings.selectedJuzaa.length) && (
+          <Button
+            variant="default"
+            className="mt-4"
+            onClick={() => router.push("/setup")}
+          >
+            Configure Settings
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          className="mt-2"
+          onClick={() => {
+            setIsLoading(true);
+            setReviewStatus("loading");
+            setError(null);
+            loadAyahs();
+          }}
+        >
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Try Again
+        </Button>
       </div>
     );
   }
 
-  if (reviewStatus === "error") {
+  if (isSettingsLoading || isLoading) {
     return (
-      <Card className="text-center max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-destructive">Error</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <p className="mb-4">{error}</p>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <Button variant="outline" onClick={resetReview} className="mr-2">
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Try Again
-          </Button>
-          <Link href="/setup">
-            <Button>
-              Review Settings
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
-        </CardFooter>
-      </Card>
+      <div className="flex flex-col items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-lg">Loading review...</p>
+      </div>
     );
   }
 
@@ -506,18 +688,42 @@ export default function ReviewPage() {
           <p className="mb-6">
             Great job! Consistent review helps strengthen your memorization.
           </p>
+
+          {isGuestMode && status !== "authenticated" && (
+            <Alert className="mb-4 bg-blue-50 border-blue-200">
+              <AlertDescription className="text-blue-800">
+                Sign up for a free account to unlock full features including:
+                <ul className="list-disc pl-5 mt-2">
+                  <li>Track your progress over time</li>
+                  <li>Personalized spaced repetition</li>
+                  <li>Custom review settings</li>
+                  <li>Review history and statistics</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
         <CardFooter className="flex justify-center space-x-4">
           <Button variant="outline" onClick={resetReview}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Review More
           </Button>
-          <Link href="/dashboard">
-            <Button>
-              Back to Dashboard
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+
+          {isGuestMode && status !== "authenticated" ? (
+            <Link href="/register">
+              <Button>
+                Sign Up Now
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/dashboard">
+              <Button>
+                Back to Dashboard
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </CardFooter>
       </Card>
     );
@@ -526,7 +732,27 @@ export default function ReviewPage() {
   const currentAyah = reviewAyahs[currentAyahIndex];
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="container max-w-4xl px-4 py-6 mx-auto">
+      {isGuestMode && status !== "authenticated" && (
+        <Alert className="mb-4 bg-yellow-50 border-yellow-200">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span className="text-yellow-800">
+              You're in guest mode. Your progress won't be saved.
+            </span>
+            <Link href="/register">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-yellow-600 border-yellow-600 hover:bg-yellow-100"
+              >
+                Sign Up
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -637,9 +863,14 @@ export default function ReviewPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground">
-                    No more ayahs available in this surah.
-                  </p>
+                  <div className="py-4">
+                    <p className="text-center text-muted-foreground mb-2">
+                      This is the end of Surah {currentAyah.surah_name_roman}.
+                    </p>
+                    <p className="text-center text-xs text-muted-foreground">
+                      Each review prompt stays within a single surah.
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -670,5 +901,14 @@ export default function ReviewPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Default export that wraps the component with Suspense
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={<ReviewPageLoading />}>
+      <ReviewPageContent />
+    </Suspense>
   );
 }

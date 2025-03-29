@@ -7,13 +7,15 @@ import { Providers } from "./providers";
 import { Metadata } from "next";
 import { ToastProvider } from "@/components/ui/toast";
 import { GoogleAnalytics } from "@next/third-parties/google";
+import { NotificationProvider } from "@/components/notifications/NotificationContext";
+import { NotificationPromptWrapper } from "@/components/notifications/NotificationPromptWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
 
 // Get the base URL for the application
 const baseUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
-  : "https://quranki.vercel.app";
+  : "https://quranki.com";
 
 export const metadata: Metadata = {
   title: {
@@ -38,6 +40,7 @@ export const metadata: Metadata = {
     },
   ],
   creator: "Quranki",
+  metadataBase: new URL("https://quranki.com"),
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -97,6 +100,21 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap"
           rel="stylesheet"
         />
+        
+        {/* Firebase initialization script */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                  .then(function(registration) {
+                  })
+                  .catch(function(error) {
+                  });
+              }
+            `,
+          }}
+        />
       </head>
       <body
         className={`${inter.className} min-h-screen bg-background font-sans antialiased`}
@@ -112,31 +130,36 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <ToastProvider>
-              <div className="flex min-h-screen flex-col">
-                <MainNav />
-                <main className="flex-1">{children}</main>
-                <footer className="border-t py-6 md:py-0">
-                  <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
-                    <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-                      © {new Date().getFullYear()} QuranKi. All rights reserved.
-                    </p>
-                    <div className="flex gap-4">
-                      <a
-                        href="/privacy"
-                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Privacy
-                      </a>
-                      <a
-                        href="/terms"
-                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Terms
-                      </a>
-                    </div>
+              <NotificationProvider>
+                <div className="flex min-h-screen flex-col">
+                  <MainNav />
+                  <div className="container mt-4">
+                    <NotificationPromptWrapper />
                   </div>
-                </footer>
-              </div>
+                  <main className="flex-1">{children}</main>
+                  <footer className="border-t py-6 md:py-0">
+                    <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
+                      <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
+                        © {new Date().getFullYear()} QuranKi. All rights reserved.
+                      </p>
+                      <div className="flex gap-4">
+                        <a
+                          href="/privacy"
+                          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Privacy
+                        </a>
+                        <a
+                          href="/terms"
+                          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Terms
+                        </a>
+                      </div>
+                    </div>
+                  </footer>
+                </div>
+              </NotificationProvider>
             </ToastProvider>
           </ThemeProvider>
         </Providers>
