@@ -243,42 +243,60 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
     setReviewStatus("loading");
 
     try {
-      // Use the configured promptsPerSession or default to 20 if not set
-      const count = settings.promptsPerSession || 20;
-
-      // Check if this is a prefetch request from headers
-      const isPrefetch = document.head.querySelector('meta[name="x-preload"]');
-
       // Prepare the base URL for the API request
       let apiUrl = "";
 
       if (settings.selectionType === "juzaa") {
         const juzParam = settings.selectedJuzaa.join(",");
-        apiUrl = `/api/quran?action=review&juz=${juzParam}&count=${count}${
-          isGuestMode ? "&guest=true" : ""
-        }`;
+        apiUrl = `/api/quran?action=review&juz=${juzParam}&count=${
+          settings.promptsPerSession || 20
+        }${isGuestMode ? "&guest=true" : ""}`;
       } else {
         const surahParam = settings.selectedSurahs.join(",");
-        apiUrl = `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${count}${
-          isGuestMode ? "&guest=true" : ""
-        }`;
+        apiUrl = `/api/quran?action=reviewBySurah&surah=${surahParam}&count=${
+          settings.promptsPerSession || 20
+        }${isGuestMode ? "&guest=true" : ""}`;
       }
 
-      // If there's a cached version, use that for initial display
+      // Check for preloaded data first
       const cachedResponse = sessionStorage.getItem(`review-cache-${apiUrl}`);
       let data;
 
-      if (cachedResponse && !isPrefetch) {
+      if (cachedResponse) {
         try {
           data = JSON.parse(cachedResponse);
-          // Immediately set the ayahs from cache for faster rendering
+          // Process the preloaded data immediately
           processAyahData(data);
+
+          // Fetch fresh data in the background for next time
+          fetch(apiUrl, {
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
+          })
+            .then((response) => response.json())
+            .then((freshData) => {
+              if (freshData.success && freshData.ayahs) {
+                sessionStorage.setItem(
+                  `review-cache-${apiUrl}`,
+                  JSON.stringify(freshData)
+                );
+              }
+            })
+            .catch((error) => {
+              console.error("Error fetching fresh data:", error);
+            });
+
+          return; // Exit early since we've already processed the preloaded data
         } catch (e) {
           console.error("Error parsing cached response:", e);
+          // Continue to fetch fresh data if cache parsing fails
         }
       }
 
-      // Always fetch fresh data, even if we used the cache
+      // If no valid cache exists, fetch fresh data
       const response = await fetch(apiUrl, {
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -289,12 +307,12 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
 
       data = await response.json();
 
-      // Cache the response for future use
       if (data.success && data.ayahs) {
         sessionStorage.setItem(`review-cache-${apiUrl}`, JSON.stringify(data));
+        processAyahData(data);
+      } else {
+        throw new Error("Failed to load Quran data");
       }
-
-      processAyahData(data);
     } catch (error) {
       console.error("Error loading ayahs:", error);
       setError("Failed to load Quran data. Please try again.");
@@ -1210,7 +1228,7 @@ export default function ReviewPage() {
       if (isDataReady) {
         setShowSkeleton(false);
       }
-    }, 350);
+    }, 10);
 
     return () => clearTimeout(timer);
   }, [isDataReady]);

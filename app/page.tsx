@@ -49,41 +49,70 @@ export default function LandingPage() {
 
     setIsPreloading(true);
     try {
-      // Make all API calls in parallel
-      await Promise.all([
-        // Preload review data based on settings
+      // Prepare the API URL
+      const apiUrl =
         settings.selectionType === "juzaa"
-          ? fetch(
-              `/api/quran?action=review&juz=${settings.selectedJuzaa.join(
-                ","
-              )}&count=${settings.promptsPerSession || 20}`,
-              {
-                headers: { Purpose: "prefetch", "x-preload": "true" },
-              }
-            )
-          : fetch(
-              `/api/quran?action=reviewBySurah&surah=${settings.selectedSurahs.join(
-                ","
-              )}&count=${settings.promptsPerSession || 20}`,
-              {
-                headers: { Purpose: "prefetch", "x-preload": "true" },
-              }
-            ),
+          ? `/api/quran?action=review&juz=${settings.selectedJuzaa.join(
+              ","
+            )}&count=${settings.promptsPerSession || 20}`
+          : `/api/quran?action=reviewBySurah&surah=${settings.selectedSurahs.join(
+              ","
+            )}&count=${settings.promptsPerSession || 20}`;
 
-        // Preload some additional quran data that might be needed
-        fetch(
-          `/api/quran?action=${
-            settings.selectionType === "juzaa" ? "juz" : "surah"
-          }&${settings.selectionType === "juzaa" ? "juz" : "surah"}=${
-            settings.selectionType === "juzaa"
-              ? settings.selectedJuzaa[0]
-              : settings.selectedSurahs[0]
-          }`,
-          {
-            headers: { Purpose: "prefetch", "x-preload": "true" },
+      // Fetch the review data
+      const response = await fetch(apiUrl, {
+        headers: {
+          Purpose: "prefetch",
+          "x-preload": "true",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      const data = await response.json();
+
+      // Store in session storage for instant access
+      if (data.success && data.ayahs) {
+        sessionStorage.setItem(`review-cache-${apiUrl}`, JSON.stringify(data));
+      }
+
+      // Also preload the first ayah's context data
+      if (data.success && data.ayahs && data.ayahs.length > 0) {
+        const firstAyah = data.ayahs[0];
+
+        // Preload previous ayahs if not first ayah in surah
+        if (firstAyah.ayah_no_surah > 1) {
+          const prevResponse = await fetch(
+            `/api/quran?action=prev&surah=${firstAyah.surah_no}&ayah=${
+              firstAyah.ayah_no_surah
+            }&count=${settings.ayahsBefore || 2}`,
+            { headers: { Purpose: "prefetch", "x-preload": "true" } }
+          );
+          const prevData = await prevResponse.json();
+          if (prevData.success) {
+            sessionStorage.setItem(
+              `prev-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+              JSON.stringify(prevData)
+            );
           }
-        ),
-      ]);
+        }
+
+        // Preload next ayahs
+        const nextResponse = await fetch(
+          `/api/quran?action=next&surah=${firstAyah.surah_no}&ayah=${
+            firstAyah.ayah_no_surah
+          }&count=${settings.ayahsAfter || 3}`,
+          { headers: { Purpose: "prefetch", "x-preload": "true" } }
+        );
+        const nextData = await nextResponse.json();
+        if (nextData.success) {
+          sessionStorage.setItem(
+            `next-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+            JSON.stringify(nextData)
+          );
+        }
+      }
     } catch (error) {
       console.error("Error preloading review data:", error);
     } finally {
@@ -97,10 +126,58 @@ export default function LandingPage() {
 
     setIsPreloading(true);
     try {
-      // Preload guest review data (juz 30 with 2 ayahs after)
-      await fetch("/api/quran?action=review&juz=30&count=20&guest=true", {
-        headers: { Purpose: "prefetch", "x-preload": "true" },
+      const apiUrl = "/api/quran?action=review&juz=30&count=20&guest=true";
+
+      // Fetch guest review data
+      const response = await fetch(apiUrl, {
+        headers: {
+          Purpose: "prefetch",
+          "x-preload": "true",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
       });
+
+      const data = await response.json();
+
+      // Store in session storage for instant access
+      if (data.success && data.ayahs) {
+        sessionStorage.setItem(`review-cache-${apiUrl}`, JSON.stringify(data));
+
+        // Also preload the first ayah's context
+        if (data.ayahs.length > 0) {
+          const firstAyah = data.ayahs[0];
+
+          // Preload previous ayahs if not first ayah in surah
+          if (firstAyah.ayah_no_surah > 1) {
+            const prevResponse = await fetch(
+              `/api/quran?action=prev&surah=${firstAyah.surah_no}&ayah=${firstAyah.ayah_no_surah}&count=2&guest=true`,
+              { headers: { Purpose: "prefetch", "x-preload": "true" } }
+            );
+            const prevData = await prevResponse.json();
+            if (prevData.success) {
+              sessionStorage.setItem(
+                `prev-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+                JSON.stringify(prevData)
+              );
+            }
+          }
+
+          // Preload next ayahs
+          const nextResponse = await fetch(
+            `/api/quran?action=next&surah=${firstAyah.surah_no}&ayah=${firstAyah.ayah_no_surah}&count=2&guest=true`,
+            { headers: { Purpose: "prefetch", "x-preload": "true" } }
+          );
+          const nextData = await nextResponse.json();
+          if (nextData.success) {
+            sessionStorage.setItem(
+              `next-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+              JSON.stringify(nextData)
+            );
+          }
+        }
+      }
     } catch (error) {
       console.error("Error preloading guest review data:", error);
     } finally {
