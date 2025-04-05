@@ -13,6 +13,7 @@ export default function LandingPage() {
   const isLoggedIn = !!session?.user;
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPreloading, setIsPreloading] = useState(false);
 
   // Check if the user has completed setup
   useEffect(() => {
@@ -22,6 +23,11 @@ export default function LandingPage() {
           const response = await fetch("/api/settings");
           const data = await response.json();
           setHasCompletedSetup(!!data.settings);
+
+          // If user has settings, preload review data
+          if (data.settings) {
+            preloadReviewData(data.settings);
+          }
         } catch (error) {
           console.error("Error checking user settings:", error);
         } finally {
@@ -32,8 +38,152 @@ export default function LandingPage() {
       checkUserSettings();
     } else {
       setIsLoading(false);
+      // For non-logged in users, preload guest mode data
+      preloadGuestReviewData();
     }
   }, [isLoggedIn]);
+
+  // Function to preload review data for authenticated users
+  const preloadReviewData = async (settings: any) => {
+    if (isPreloading) return; // Prevent duplicate preloading
+
+    setIsPreloading(true);
+    try {
+      // Prepare the API URL
+      const apiUrl =
+        settings.selectionType === "juzaa"
+          ? `/api/quran?action=review&juz=${settings.selectedJuzaa.join(
+              ","
+            )}&count=${settings.promptsPerSession || 20}`
+          : `/api/quran?action=reviewBySurah&surah=${settings.selectedSurahs.join(
+              ","
+            )}&count=${settings.promptsPerSession || 20}`;
+
+      // Fetch the review data
+      const response = await fetch(apiUrl, {
+        headers: {
+          Purpose: "prefetch",
+          "x-preload": "true",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      const data = await response.json();
+
+      // Store in session storage for instant access
+      if (data.success && data.ayahs) {
+        sessionStorage.setItem(`review-cache-${apiUrl}`, JSON.stringify(data));
+      }
+
+      // Also preload the first ayah's context data
+      if (data.success && data.ayahs && data.ayahs.length > 0) {
+        const firstAyah = data.ayahs[0];
+
+        // Preload previous ayahs if not first ayah in surah
+        if (firstAyah.ayah_no_surah > 1) {
+          const prevResponse = await fetch(
+            `/api/quran?action=prev&surah=${firstAyah.surah_no}&ayah=${
+              firstAyah.ayah_no_surah
+            }&count=${settings.ayahsBefore || 2}`,
+            { headers: { Purpose: "prefetch", "x-preload": "true" } }
+          );
+          const prevData = await prevResponse.json();
+          if (prevData.success) {
+            sessionStorage.setItem(
+              `prev-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+              JSON.stringify(prevData)
+            );
+          }
+        }
+
+        // Preload next ayahs
+        const nextResponse = await fetch(
+          `/api/quran?action=next&surah=${firstAyah.surah_no}&ayah=${
+            firstAyah.ayah_no_surah
+          }&count=${settings.ayahsAfter || 3}`,
+          { headers: { Purpose: "prefetch", "x-preload": "true" } }
+        );
+        const nextData = await nextResponse.json();
+        if (nextData.success) {
+          sessionStorage.setItem(
+            `next-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+            JSON.stringify(nextData)
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error preloading review data:", error);
+    } finally {
+      setIsPreloading(false);
+    }
+  };
+
+  // Function to preload guest review data
+  const preloadGuestReviewData = async () => {
+    if (isPreloading) return; // Prevent duplicate preloading
+
+    setIsPreloading(true);
+    try {
+      const apiUrl = "/api/quran?action=review&juz=30&count=20&guest=true";
+
+      // Fetch guest review data
+      const response = await fetch(apiUrl, {
+        headers: {
+          Purpose: "prefetch",
+          "x-preload": "true",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      const data = await response.json();
+
+      // Store in session storage for instant access
+      if (data.success && data.ayahs) {
+        sessionStorage.setItem(`review-cache-${apiUrl}`, JSON.stringify(data));
+
+        // Also preload the first ayah's context
+        if (data.ayahs.length > 0) {
+          const firstAyah = data.ayahs[0];
+
+          // Preload previous ayahs if not first ayah in surah
+          if (firstAyah.ayah_no_surah > 1) {
+            const prevResponse = await fetch(
+              `/api/quran?action=prev&surah=${firstAyah.surah_no}&ayah=${firstAyah.ayah_no_surah}&count=2&guest=true`,
+              { headers: { Purpose: "prefetch", "x-preload": "true" } }
+            );
+            const prevData = await prevResponse.json();
+            if (prevData.success) {
+              sessionStorage.setItem(
+                `prev-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+                JSON.stringify(prevData)
+              );
+            }
+          }
+
+          // Preload next ayahs
+          const nextResponse = await fetch(
+            `/api/quran?action=next&surah=${firstAyah.surah_no}&ayah=${firstAyah.ayah_no_surah}&count=2&guest=true`,
+            { headers: { Purpose: "prefetch", "x-preload": "true" } }
+          );
+          const nextData = await nextResponse.json();
+          if (nextData.success) {
+            sessionStorage.setItem(
+              `next-cache-${firstAyah.surah_no}-${firstAyah.ayah_no_surah}`,
+              JSON.stringify(nextData)
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error preloading guest review data:", error);
+    } finally {
+      setIsPreloading(false);
+    }
+  };
 
   const scrollToHowItWorks = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -83,7 +233,7 @@ export default function LandingPage() {
                 </p>
               </div>
               <div className="space-x-4">
-                <Link href={getReviewLink()}>
+                <Link href={getReviewLink()} prefetch={true}>
                   <Button size="lg" className="bg-primary hover:bg-primary/90">
                     {isLoading ? (
                       <span className="inline-flex items-center">
