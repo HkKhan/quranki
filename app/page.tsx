@@ -13,6 +13,7 @@ export default function LandingPage() {
   const isLoggedIn = !!session?.user;
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPreloading, setIsPreloading] = useState(false);
 
   // Check if the user has completed setup
   useEffect(() => {
@@ -22,6 +23,11 @@ export default function LandingPage() {
           const response = await fetch("/api/settings");
           const data = await response.json();
           setHasCompletedSetup(!!data.settings);
+
+          // If user has settings, preload review data
+          if (data.settings) {
+            preloadReviewData(data.settings);
+          }
         } catch (error) {
           console.error("Error checking user settings:", error);
         } finally {
@@ -32,8 +38,75 @@ export default function LandingPage() {
       checkUserSettings();
     } else {
       setIsLoading(false);
+      // For non-logged in users, preload guest mode data
+      preloadGuestReviewData();
     }
   }, [isLoggedIn]);
+
+  // Function to preload review data for authenticated users
+  const preloadReviewData = async (settings: any) => {
+    if (isPreloading) return; // Prevent duplicate preloading
+
+    setIsPreloading(true);
+    try {
+      // Make all API calls in parallel
+      await Promise.all([
+        // Preload review data based on settings
+        settings.selectionType === "juzaa"
+          ? fetch(
+              `/api/quran?action=review&juz=${settings.selectedJuzaa.join(
+                ","
+              )}&count=${settings.promptsPerSession || 20}`,
+              {
+                headers: { Purpose: "prefetch", "x-preload": "true" },
+              }
+            )
+          : fetch(
+              `/api/quran?action=reviewBySurah&surah=${settings.selectedSurahs.join(
+                ","
+              )}&count=${settings.promptsPerSession || 20}`,
+              {
+                headers: { Purpose: "prefetch", "x-preload": "true" },
+              }
+            ),
+
+        // Preload some additional quran data that might be needed
+        fetch(
+          `/api/quran?action=${
+            settings.selectionType === "juzaa" ? "juz" : "surah"
+          }&${settings.selectionType === "juzaa" ? "juz" : "surah"}=${
+            settings.selectionType === "juzaa"
+              ? settings.selectedJuzaa[0]
+              : settings.selectedSurahs[0]
+          }`,
+          {
+            headers: { Purpose: "prefetch", "x-preload": "true" },
+          }
+        ),
+      ]);
+    } catch (error) {
+      console.error("Error preloading review data:", error);
+    } finally {
+      setIsPreloading(false);
+    }
+  };
+
+  // Function to preload guest review data
+  const preloadGuestReviewData = async () => {
+    if (isPreloading) return; // Prevent duplicate preloading
+
+    setIsPreloading(true);
+    try {
+      // Preload guest review data (juz 30 with 2 ayahs after)
+      await fetch("/api/quran?action=review&juz=30&count=20&guest=true", {
+        headers: { Purpose: "prefetch", "x-preload": "true" },
+      });
+    } catch (error) {
+      console.error("Error preloading guest review data:", error);
+    } finally {
+      setIsPreloading(false);
+    }
+  };
 
   const scrollToHowItWorks = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -83,7 +156,7 @@ export default function LandingPage() {
                 </p>
               </div>
               <div className="space-x-4">
-                <Link href={getReviewLink()}>
+                <Link href={getReviewLink()} prefetch={true}>
                   <Button size="lg" className="bg-primary hover:bg-primary/90">
                     {isLoading ? (
                       <span className="inline-flex items-center">
