@@ -332,14 +332,36 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       return;
     }
 
-    // Set the ayahs in state
-    setAyahs(data.ayahs);
-    setReviewAyahs(data.ayahs);
+    // Group ayahs by surah and ensure sequential ordering within each surah
+    const groupedAyahs: Record<number, QuranAyah[]> = {};
+    
+    // First, group all ayahs by surah
+    for (const ayah of data.ayahs) {
+      if (!groupedAyahs[ayah.surah_no]) {
+        groupedAyahs[ayah.surah_no] = [];
+      }
+      groupedAyahs[ayah.surah_no].push(ayah);
+    }
+    
+    // Sort ayahs within each surah by ayah number
+    for (const surahNo in groupedAyahs) {
+      groupedAyahs[surahNo].sort((a, b) => a.ayah_no_surah - b.ayah_no_surah);
+    }
+    
+    // Flatten the groups back into a single array while maintaining the grouping by surah
+    const organizedAyahs: QuranAyah[] = [];
+    for (const surahNo in groupedAyahs) {
+      organizedAyahs.push(...groupedAyahs[surahNo]);
+    }
+
+    // Set the organized ayahs in state
+    setAyahs(organizedAyahs);
+    setReviewAyahs(organizedAyahs);
 
     // Immediately load first ayah
-    if (data.ayahs && data.ayahs.length > 0) {
+    if (organizedAyahs && organizedAyahs.length > 0) {
       setReviewStatus("question");
-      const firstAyah = data.ayahs[0];
+      const firstAyah = organizedAyahs[0];
 
       // Load next ayahs for the first question immediately
       if (settings?.ayahsAfter && settings.ayahsAfter > 0) {
@@ -349,8 +371,8 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       }
 
       // Start preloading data for subsequent ayahs
-      if (data.ayahs.length > 1) {
-        preloadNextAyahsData(data.ayahs, 0);
+      if (organizedAyahs.length > 1) {
+        preloadNextAyahsData(organizedAyahs, 0);
       }
     }
 
@@ -524,7 +546,10 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
         if (nextData.success && nextData.ayahs) {
           // Cache the response
           sessionStorage.setItem(nextCacheKey, JSON.stringify(nextData));
-          nextAyahsResult = nextData.ayahs;
+          // Only include next ayahs from the same surah
+          nextAyahsResult = nextData.ayahs.filter(
+            (a: QuranAyah) => a.surah_no === ayah.surah_no
+          );
         }
       } catch (error) {
         console.error("Error loading next ayahs:", error);
@@ -533,7 +558,10 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       try {
         const data = JSON.parse(cachedNextData);
         if (data.success && data.ayahs) {
-          nextAyahsResult = data.ayahs;
+          // Only include next ayahs from the same surah
+          nextAyahsResult = data.ayahs.filter(
+            (a: QuranAyah) => a.surah_no === ayah.surah_no
+          );
         }
       } catch (e) {
         console.error("Error parsing cached next ayahs:", e);
@@ -629,7 +657,11 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       try {
         const data = JSON.parse(cachedNextData);
         if (data.success && data.ayahs) {
-          setNextAyahs(data.ayahs);
+          // Filter to only include ayahs from the same surah
+          const sameSurahNextAyahs = data.ayahs.filter(
+            (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
+          );
+          setNextAyahs(sameSurahNextAyahs);
           return;
         }
       } catch (e) {
@@ -697,7 +729,12 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       if (nextData.success && nextData.ayahs) {
         // Cache the next ayahs data
         sessionStorage.setItem(nextCacheKey, JSON.stringify(nextData));
-        setNextAyahs(nextData.ayahs);
+        
+        // Filter to only include ayahs from the same surah
+        const sameSurahNextAyahs = nextData.ayahs.filter(
+          (ayah: QuranAyah) => ayah.surah_no === currentAyah.surah_no
+        );
+        setNextAyahs(sameSurahNextAyahs);
       } else {
         setNextAyahs([]);
       }
@@ -729,8 +766,12 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       setReviewedCount(reviewedCount + 1);
 
       if (currentAyahIndex + 1 < reviewAyahs.length) {
-        // Use preloaded data if available
+        // Check if next ayah is from the same surah
+        const currentAyah = reviewAyahs[currentAyahIndex];
         const nextIndex = currentAyahIndex + 1;
+        const nextAyah = reviewAyahs[nextIndex];
+        
+        // Use preloaded data if available
         const preloadedData = preloadedAyahsData[nextIndex];
 
         if (preloadedData) {
