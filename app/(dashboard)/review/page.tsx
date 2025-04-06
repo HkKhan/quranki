@@ -145,6 +145,26 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
     }
   }, []);
 
+  // Clear session storage cache when settings change
+  const clearPreloadedCache = () => {
+    try {
+      // Clear preloaded ayahs data
+      sessionStorage.removeItem("preloaded-ayahs-data");
+      setPreloadedAyahsData({});
+      
+      // Clear all review cache entries
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith("review-cache-") || 
+            key.startsWith("prev-cache-") || 
+            key.startsWith("next-cache-")) {
+          sessionStorage.removeItem(key);
+        }
+      });
+    } catch (e) {
+      console.error("Error clearing preloaded cache:", e);
+    }
+  };
+
   useEffect(() => {
     // Skip auth check for guest mode
     if (!isGuestMode && status === "unauthenticated") {
@@ -167,6 +187,9 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
       }
 
       try {
+        // Clear any preloaded cache when initializing with new settings
+        clearPreloadedCache();
+        
         // For guest users, set up guest settings without API call
         if (isGuestMode) {
           const guestSettings = {
@@ -241,6 +264,9 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
 
     setIsLoading(true);
     setReviewStatus("loading");
+
+    // Clear any stale preloaded data when loading new ayahs
+    clearPreloadedCache();
 
     try {
       // Prepare the base URL for the API request
@@ -976,6 +1002,8 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
   };
 
   const resetReview = () => {
+    // Clear preloaded cache when resetting review
+    clearPreloadedCache();
     loadAyahsWithSettings(settings);
   };
 
