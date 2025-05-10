@@ -1135,8 +1135,15 @@ function ReviewPageContent({ onDataReady }: { onDataReady: () => void }) {
               {currentAyahIndex + 1} of {reviewAyahs.length}
             </span>
           </CardTitle>
-          <CardDescription>
-            Review your memorization of the Quran
+          <CardDescription className="flex items-center justify-between">
+            <span>Review your memorization of the Quran</span>
+            <Link
+              href="/review-mushaf"
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <BookOpen className="h-3 w-3" />
+              Try Mushaf Mode
+            </Link>
           </CardDescription>
         </CardHeader>
         <CardContent>
